@@ -8,6 +8,7 @@ import { QuoteCard } from "@/components/QuoteCard";
 import { RecommendationsPanel } from "@/components/RecommendationsPanel";
 import { SummaryCard } from "@/components/SummaryCard";
 import { API_TARGET, getNews, getQuote, getRecommendations, getSummary } from "@/lib/api";
+import { DEFAULT_RECOMMENDATIONS } from "@/lib/default-recommendations";
 import type {
   AsyncSection,
   NewsResponse,
@@ -60,7 +61,13 @@ export default function HomePage() {
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection("loading"));
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection("loading"));
   const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection("loading"));
-  const [recommendationSection, setRecommendationSection] = useState<AsyncSection<RecommendationsResponse>>(createSection("loading"));
+  const [recommendationSection, setRecommendationSection] = useState<AsyncSection<RecommendationsResponse>>({
+    status: "success",
+    data: DEFAULT_RECOMMENDATIONS,
+    error: null,
+  });
+  const [isRecommendationRefreshing, setIsRecommendationRefreshing] = useState(false);
+  const [recommendationRefreshError, setRecommendationRefreshError] = useState<string | null>(null);
   const hasBootstrapped = useRef(false);
 
   const isSubmitting =
@@ -112,33 +119,38 @@ export default function HomePage() {
     }
   }, []);
 
+  const refreshRecommendations = useCallback(async () => {
+    setRecommendationRefreshError(null);
+    setIsRecommendationRefreshing(true);
+
+    try {
+      const recommendations = await getRecommendations();
+      setRecommendationSection({ status: "success", data: recommendations, error: null });
+      setSelectedRecommendationCategory((current) => {
+        if (current !== "全部" && !recommendations.categories.includes(current)) {
+          return "全部";
+        }
+        return current;
+      });
+      setSelectedRecommendationStyle((current) => {
+        if (current !== "全部" && !recommendations.style_filters.includes(current)) {
+          return "全部";
+        }
+        return current;
+      });
+    } catch (error) {
+      setRecommendationRefreshError(toErrorMessage(error));
+    } finally {
+      setIsRecommendationRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (hasBootstrapped.current) {
       return;
     }
     hasBootstrapped.current = true;
     void runAnalysis(DEFAULT_SYMBOL);
-    void (async () => {
-      setRecommendationSection(createSection("loading"));
-      try {
-        const recommendations = await getRecommendations();
-        setRecommendationSection({ status: "success", data: recommendations, error: null });
-        setSelectedRecommendationCategory((current) => {
-          if (current !== "全部" && !recommendations.categories.includes(current)) {
-            return "全部";
-          }
-          return current;
-        });
-        setSelectedRecommendationStyle((current) => {
-          if (current !== "全部" && !recommendations.style_filters.includes(current)) {
-            return "全部";
-          }
-          return current;
-        });
-      } catch (error) {
-        setRecommendationSection({ status: "error", data: null, error: toErrorMessage(error) });
-      }
-    })();
   }, [runAnalysis]);
 
   const handleAnalyze = async () => {
@@ -177,9 +189,12 @@ export default function HomePage() {
           section={recommendationSection}
           selectedCategory={selectedRecommendationCategory}
           selectedStyle={selectedRecommendationStyle}
+          isRefreshing={isRecommendationRefreshing}
+          refreshError={recommendationRefreshError}
           onCategoryChange={setSelectedRecommendationCategory}
           onStyleChange={setSelectedRecommendationStyle}
           onAnalyzeSymbol={handleRecommendationAnalyze}
+          onRefresh={refreshRecommendations}
         />
       </section>
     </main>

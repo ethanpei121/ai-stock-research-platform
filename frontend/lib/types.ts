@@ -1,4 +1,5 @@
 export type LoadState = "idle" | "loading" | "success" | "error";
+export type RecommendationMode = "preset" | "live";
 
 export type Quote = {
   symbol: string;
@@ -73,8 +74,8 @@ export type RecommendationStock = {
   rationale: string;
   tags: string[];
   styles: string[];
-  scorecard: RecommendationScorecard;
-  evidence: RecommendationEvidence;
+  scorecard: RecommendationScorecard | null;
+  evidence: RecommendationEvidence | null;
   data_sources: string[];
 };
 
@@ -87,6 +88,7 @@ export type RecommendationGroup = {
 };
 
 export type RecommendationsResponse = {
+  mode: RecommendationMode;
   updated_at: string;
   categories: string[];
   style_filters: string[];

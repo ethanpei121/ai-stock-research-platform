@@ -203,8 +203,8 @@ function normalizeRecommendationGroups(value: unknown): RecommendationGroup[] {
             rationale: asString(stockRecord.rationale),
             tags: asStringArray(stockRecord.tags),
             styles: asStringArray(stockRecord.styles),
-            scorecard: normalizeRecommendationScorecard(stockRecord.scorecard),
-            evidence: normalizeRecommendationEvidence(stockRecord.evidence),
+            scorecard: stockRecord.scorecard ? normalizeRecommendationScorecard(stockRecord.scorecard) : null,
+            evidence: stockRecord.evidence ? normalizeRecommendationEvidence(stockRecord.evidence) : null,
             data_sources: asStringArray(stockRecord.data_sources),
           };
         })
@@ -229,6 +229,7 @@ function normalizeRecommendations(payload: unknown): RecommendationsResponse {
   );
 
   return {
+    mode: data.mode === "preset" ? "preset" : "live",
     updated_at: asString(data.updated_at, new Date().toISOString()),
     categories: Array.isArray(data.categories)
       ? data.categories.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
