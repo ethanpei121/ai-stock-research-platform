@@ -53,6 +53,14 @@ class SummaryDataPoints(BaseModel):
     news_count: int
 
 
+class SummaryMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    model: str | None = None
+    is_fallback: bool
+
+
 class SummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -60,3 +68,4 @@ class SummaryResponse(BaseModel):
     generated_at: datetime
     summary: SummaryContent
     data_points: SummaryDataPoints
+    meta: SummaryMeta

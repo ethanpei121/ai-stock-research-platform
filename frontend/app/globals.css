@@ -341,3 +341,30 @@ a {
     width: 100%;
   }
 }
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-chip--live {
+  color: var(--accent-strong);
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.status-chip--fallback {
+  color: #92400e;
+  background: rgba(217, 119, 6, 0.14);
+}
+
+@media (max-width: 640px) {
+  .status-chip {
+    width: 100%;
+    justify-content: center;
+  }
+}

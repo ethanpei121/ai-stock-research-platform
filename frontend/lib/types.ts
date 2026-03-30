@@ -35,6 +35,11 @@ export type SummaryResponse = {
     change_percent: number;
     news_count: number;
   };
+  meta: {
+    provider: string;
+    model: string | null;
+    is_fallback: boolean;
+  };
 };
 
 export type ApiErrorResponse = {

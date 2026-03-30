@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from openai import OpenAI
 
 from app.core.config import get_settings
-from app.schemas.market import NewsItem, SummaryContent, SummaryDataPoints, SummaryResponse
+from app.schemas.market import NewsItem, SummaryContent, SummaryDataPoints, SummaryMeta, SummaryResponse
 from app.services.market_data import get_news, get_quote, normalize_symbol
 
 
@@ -36,28 +37,35 @@ NEGATIVE_KEYWORDS = (
 )
 
 
+@dataclass
+class SummaryGenerationResult:
+    content: SummaryContent
+    meta: SummaryMeta
+
+
 def generate_summary(symbol: str, generated_at: datetime | None = None) -> SummaryResponse:
     normalized_symbol = normalize_symbol(symbol)
     quote = get_quote(normalized_symbol)
     news = get_news(normalized_symbol, limit=5)
 
-    summary_content = _generate_llm_summary(normalized_symbol, quote, news.items)
-    if summary_content is None:
-        summary_content = _generate_rule_summary(normalized_symbol, quote, news.items)
+    summary_result = _generate_llm_summary(normalized_symbol, quote, news.items)
+    if summary_result is None:
+        summary_result = _generate_rule_summary(normalized_symbol, quote, news.items)
 
     return SummaryResponse(
         symbol=normalized_symbol,
         generated_at=generated_at or datetime.now(timezone.utc),
-        summary=summary_content,
+        summary=summary_result.content,
         data_points=SummaryDataPoints(
             price=quote.price,
             change_percent=quote.change_percent,
             news_count=len(news.items),
         ),
+        meta=summary_result.meta,
     )
 
 
-def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryContent | None:
+def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryGenerationResult | None:
     settings = get_settings()
     if not settings.llm_api_key:
         return None
@@ -109,10 +117,17 @@ def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -
         )
         content = completion.choices[0].message.content or ""
         parsed = _extract_json_object(content)
-        return SummaryContent(
-            bullish=_coerce_points(parsed.get("bullish"), minimum=2),
-            bearish=_coerce_points(parsed.get("bearish"), minimum=2),
-            conclusion=_coerce_conclusion(parsed.get("conclusion")),
+        return SummaryGenerationResult(
+            content=SummaryContent(
+                bullish=_coerce_points(parsed.get("bullish"), minimum=2),
+                bearish=_coerce_points(parsed.get("bearish"), minimum=2),
+                conclusion=_coerce_conclusion(parsed.get("conclusion")),
+            ),
+            meta=SummaryMeta(
+                provider="dashscope" if settings.dashscope_api_key else "openai",
+                model=settings.llm_model,
+                is_fallback=False,
+            ),
         )
     except Exception as exc:
         logger.exception("LLM summary generation failed, falling back to rule template.", exc_info=exc)
@@ -144,7 +159,7 @@ def _extract_json_object(content: str) -> dict[str, Any]:
     raise ValueError("LLM response is not valid JSON.")
 
 
-def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryContent:
+def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryGenerationResult:
     positive_hits = 0
     negative_hits = 0
     uses_mock_news = any(item.source.startswith("mock") for item in news_items)
@@ -191,10 +206,17 @@ def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) 
         uses_mock_news=uses_mock_news,
     )
 
-    return SummaryContent(
-        bullish=_coerce_points(bullish, minimum=2),
-        bearish=_coerce_points(bearish, minimum=2),
-        conclusion=conclusion,
+    return SummaryGenerationResult(
+        content=SummaryContent(
+            bullish=_coerce_points(bullish, minimum=2),
+            bearish=_coerce_points(bearish, minimum=2),
+            conclusion=conclusion,
+        ),
+        meta=SummaryMeta(
+            provider="template",
+            model=None,
+            is_fallback=True,
+        ),
     )
 
 

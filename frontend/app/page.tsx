@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { InputPanel } from "@/components/InputPanel";
 import { NewsList } from "@/components/NewsList";
@@ -28,19 +28,23 @@ export default function HomePage() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
   const [formError, setFormError] = useState<string | null>(null);
-  const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection());
-  const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection());
-  const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection());
+  const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection("loading"));
+  const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection("loading"));
+  const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection("loading"));
+  const hasAutoAnalyzed = useRef(false);
 
   const isSubmitting =
     quoteSection.status === "loading" ||
     newsSection.status === "loading" ||
     summarySection.status === "loading";
 
-  const handleAnalyze = async () => {
-    const normalized = symbol.trim().toUpperCase();
+  const runAnalysis = async (nextSymbol: string) => {
+    const normalized = nextSymbol.trim().toUpperCase();
     if (!normalized) {
       setFormError("请输入有效的股票代码，例如 AAPL。");
+      setQuoteSection(createSection());
+      setNewsSection(createSection());
+      setSummarySection(createSection());
       return;
     }
 
@@ -73,6 +77,18 @@ export default function HomePage() {
     } catch (error) {
       setSummarySection({ status: "error", data: null, error: toErrorMessage(error) });
     }
+  };
+
+  useEffect(() => {
+    if (hasAutoAnalyzed.current) {
+      return;
+    }
+    hasAutoAnalyzed.current = true;
+    void runAnalysis(DEFAULT_SYMBOL);
+  }, []);
+
+  const handleAnalyze = async () => {
+    await runAnalysis(symbol);
   };
 
   return (
