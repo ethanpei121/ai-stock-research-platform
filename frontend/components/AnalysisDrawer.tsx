@@ -260,7 +260,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
 
   return (
     <>
-      <aside className="hidden xl:sticky xl:top-6 xl:block xl:max-h-[calc(100vh-3rem)]">{panelContent}</aside>
+      <aside className="hidden xl:block xl:sticky xl:top-[6.5rem] xl:h-[calc(100vh-7.5rem)] xl:self-start">{panelContent}</aside>
       <aside className="fixed inset-x-3 bottom-3 top-24 z-30 xl:hidden">{panelContent}</aside>
     </>
   );
