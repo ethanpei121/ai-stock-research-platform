@@ -33,12 +33,13 @@ function getSummarySourceLabel(section: AsyncSection<SummaryResponse>): string |
     return null;
   }
 
-  if (section.data.meta.is_fallback) {
+  const meta = section.data.meta;
+  if (!meta || meta.is_fallback) {
     return "当前使用模板回退";
   }
 
-  const provider = section.data.meta.provider === "dashscope" ? "阿里云千问" : "OpenAI";
-  const model = section.data.meta.model ? ` · ${section.data.meta.model}` : "";
+  const provider = meta.provider === "dashscope" ? "阿里云千问" : meta.provider === "openai" ? "OpenAI" : meta.provider;
+  const model = meta.model ? ` · ${meta.model}` : "";
   return `${provider}${model}`;
 }
 

@@ -12,6 +12,7 @@ export function QuoteCard({ symbol, section }: QuoteCardProps) {
     section.status === "success" && section.data && section.data.change_percent < 0
       ? "tone-negative"
       : "tone-positive";
+  const provider = section.status === "success" && section.data ? section.data.provider || "Yahoo Finance" : null;
 
   return (
     <article className="result-card result-card--quote">
@@ -19,9 +20,7 @@ export function QuoteCard({ symbol, section }: QuoteCardProps) {
         <div>
           <p className="section-tag">Market Tape</p>
           <h2>{symbol}</h2>
-          {section.status === "success" && section.data ? (
-            <p className="section-note">当前行情命中渠道: {section.data.provider}</p>
-          ) : null}
+          {provider ? <p className="section-note">当前行情命中渠道: {provider}</p> : null}
         </div>
         {section.status === "success" && section.data ? (
           <span className={`quote-direction ${toneClass}`}>
@@ -59,7 +58,7 @@ export function QuoteCard({ symbol, section }: QuoteCardProps) {
             </div>
             <div className="ledger-cell">
               <span>Provider</span>
-              <strong>{section.data.provider}</strong>
+              <strong>{provider ?? "Yahoo Finance"}</strong>
             </div>
           </div>
         </>

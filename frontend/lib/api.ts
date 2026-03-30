@@ -42,19 +42,115 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 
-export function getQuote(symbol: string): Promise<Quote> {
-  return request<Quote>(`/api/v1/quote?symbol=${encodeURIComponent(symbol)}`);
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
 }
 
 
-export function getNews(symbol: string, limit = 5): Promise<NewsResponse> {
-  return request<NewsResponse>(`/api/v1/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}`);
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 
-export function getSummary(symbol: string): Promise<SummaryResponse> {
-  return request<SummaryResponse>("/api/v1/summary", {
-    method: "POST",
-    body: JSON.stringify({ symbol }),
-  });
+function normalizeQuote(payload: unknown): Quote {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  return {
+    symbol: asString(data.symbol),
+    price: asNumber(data.price),
+    change: asNumber(data.change),
+    change_percent: asNumber(data.change_percent),
+    currency: asString(data.currency, "USD"),
+    market_time: asString(data.market_time, new Date().toISOString()),
+    provider: asString(data.provider, "Yahoo Finance"),
+  };
+}
+
+
+function normalizeNews(payload: unknown): NewsResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const items = Array.isArray(data.items)
+    ? data.items.map((item) => {
+        const record = (item ?? {}) as Record<string, unknown>;
+        return {
+          title: asString(record.title, "Untitled"),
+          url: asString(record.url, "#"),
+          published_at: asString(record.published_at, new Date().toISOString()),
+          source: asString(record.source, "Unknown"),
+        };
+      })
+    : [];
+
+  const derivedProviders = Array.from(
+    new Set(
+      items
+        .map((item) => item.source.split(" / ", 1)[0]?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+
+  const providers = Array.isArray(data.providers)
+    ? data.providers.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : derivedProviders;
+
+  return {
+    symbol: asString(data.symbol),
+    count: typeof data.count === "number" ? data.count : items.length,
+    items,
+    providers,
+  };
+}
+
+
+function normalizeSummary(payload: unknown): SummaryResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const summary = ((data.summary ?? {}) as Record<string, unknown>);
+  const meta = ((data.meta ?? {}) as Record<string, unknown>);
+  const dataPoints = ((data.data_points ?? {}) as Record<string, unknown>);
+
+  const bullish = Array.isArray(summary.bullish)
+    ? summary.bullish.map((item) => String(item)).filter(Boolean)
+    : [];
+  const bearish = Array.isArray(summary.bearish)
+    ? summary.bearish.map((item) => String(item)).filter(Boolean)
+    : [];
+
+  return {
+    symbol: asString(data.symbol),
+    generated_at: asString(data.generated_at, new Date().toISOString()),
+    summary: {
+      bullish,
+      bearish,
+      conclusion: asString(summary.conclusion, "当前暂无可用总结。"),
+    },
+    data_points: {
+      price: asNumber(dataPoints.price),
+      change_percent: asNumber(dataPoints.change_percent),
+      news_count: asNumber(dataPoints.news_count),
+    },
+    meta: {
+      provider: asString(meta.provider, "template"),
+      model: typeof meta.model === "string" ? meta.model : null,
+      is_fallback: typeof meta.is_fallback === "boolean" ? meta.is_fallback : true,
+    },
+  };
+}
+
+
+export async function getQuote(symbol: string): Promise<Quote> {
+  return normalizeQuote(await request<unknown>(`/api/v1/quote?symbol=${encodeURIComponent(symbol)}`));
+}
+
+
+export async function getNews(symbol: string, limit = 5): Promise<NewsResponse> {
+  return normalizeNews(await request<unknown>(`/api/v1/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}`));
+}
+
+
+export async function getSummary(symbol: string): Promise<SummaryResponse> {
+  return normalizeSummary(
+    await request<unknown>("/api/v1/summary", {
+      method: "POST",
+      body: JSON.stringify({ symbol }),
+    })
+  );
 }
