@@ -12,21 +12,17 @@ import { DEFAULT_RECOMMENDATIONS } from "@/lib/default-recommendations";
 import { formatDateTime } from "@/lib/formatters";
 import type { AsyncSection, Quote, RecommendationsResponse } from "@/lib/types";
 
-
 const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSection<T> => ({
   status,
   data: null,
   error: null,
 });
 
-
 type RecommendationQuoteMap = Record<string, AsyncSection<Quote>>;
-
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
 }
-
 
 function InfoCard({
   icon,
@@ -47,7 +43,6 @@ function InfoCard({
     </div>
   );
 }
-
 
 export function HomePageClient() {
   const router = useRouter();
@@ -104,34 +99,34 @@ export function HomePageClient() {
       return next;
     });
 
-    void Promise.all(
-      symbols.map(async (symbol) => {
+    const hydrateQuotes = async () => {
+      for (const symbol of symbols) {
+        if (cancelled) {
+          return;
+        }
+
         try {
           const quote = await getQuote(symbol);
-          return { symbol, status: "success" as const, quote };
-        } catch (error) {
-          return { symbol, status: "error" as const, error: toErrorMessage(error) };
-        }
-      })
-    ).then((results) => {
-      if (cancelled) {
-        return;
-      }
-
-      setRecommendationQuoteSnapshots((current) => {
-        const next = { ...current };
-
-        for (const result of results) {
-          if (result.status === "success") {
-            next[result.symbol] = { status: "success", data: result.quote, error: null };
-          } else {
-            next[result.symbol] = { status: "error", data: null, error: result.error };
+          if (cancelled) {
+            return;
           }
+          setRecommendationQuoteSnapshots((current) => ({
+            ...current,
+            [symbol]: { status: "success", data: quote, error: null },
+          }));
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+          setRecommendationQuoteSnapshots((current) => ({
+            ...current,
+            [symbol]: { status: "error", data: null, error: toErrorMessage(error) },
+          }));
         }
+      }
+    };
 
-        return next;
-      });
-    });
+    void hydrateQuotes();
 
     return () => {
       cancelled = true;
