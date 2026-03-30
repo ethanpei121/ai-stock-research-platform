@@ -44,7 +44,15 @@ def announcements(symbol: str, limit: int = 5) -> AnnouncementsResponse:
 
 @router.post("/summary", response_model=SummaryResponse)
 def summary(payload: SummaryRequest) -> SummaryResponse:
-    return generate_summary(payload.symbol, generated_at=datetime.now(timezone.utc), force_refresh=payload.fresh)
+    return generate_summary(
+        payload.symbol,
+        generated_at=datetime.now(timezone.utc),
+        force_refresh=payload.fresh,
+        quote=payload.quote,
+        news_items=payload.news_items,
+        news_providers=payload.news_providers,
+        include_supplemental=payload.include_supplemental,
+    )
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)

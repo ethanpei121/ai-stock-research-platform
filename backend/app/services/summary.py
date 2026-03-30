@@ -14,6 +14,8 @@ from app.schemas.market import (
     AnnouncementItem,
     FundamentalsResponse,
     NewsItem,
+    NewsResponse,
+    QuoteResponse,
     SummaryContent,
     SummaryDataPoints,
     SummaryMeta,
@@ -24,6 +26,7 @@ from app.services.market_data import get_news, get_quote, normalize_symbol
 
 
 logger = logging.getLogger(__name__)
+LLM_SUMMARY_TIMEOUT_SECONDS = 10.0
 
 POSITIVE_KEYWORDS = (
     "beat",
@@ -61,55 +64,127 @@ class SummaryGenerationResult:
     meta: SummaryMeta
 
 
-def generate_summary(symbol: str, generated_at: datetime | None = None, *, force_refresh: bool = True) -> SummaryResponse:
+def generate_summary(
+    symbol: str,
+    generated_at: datetime | None = None,
+    *,
+    force_refresh: bool = True,
+    quote: QuoteResponse | None = None,
+    news_items: list[NewsItem] | None = None,
+    news_providers: list[str] | None = None,
+    include_supplemental: bool = False,
+) -> SummaryResponse:
     normalized_symbol = normalize_symbol(symbol)
-    quote = get_quote(normalized_symbol, force_refresh=force_refresh)
-    news = get_news(normalized_symbol, limit=5, force_refresh=force_refresh)
+    resolved_quote = _resolve_quote(normalized_symbol, quote, force_refresh=force_refresh)
+    resolved_news = _resolve_news(
+        normalized_symbol,
+        news_items=news_items,
+        news_providers=news_providers,
+        force_refresh=force_refresh,
+    )
 
     fundamentals: FundamentalsResponse | None = None
-    try:
-        fundamentals = get_fundamentals(normalized_symbol)
-    except APIError as exc:
-        logger.info("Fundamentals unavailable for summary %s: %s", normalized_symbol, exc.code)
-
     announcements: list[AnnouncementItem] = []
-    try:
-        announcements_response = get_announcements(normalized_symbol, limit=3)
-        announcements = announcements_response.items
-    except APIError as exc:
-        logger.info("Announcements unavailable for summary %s: %s", normalized_symbol, exc.code)
 
-    summary_result = _generate_llm_summary(normalized_symbol, quote, news.items, fundamentals, announcements)
+    if include_supplemental:
+        try:
+            fundamentals = get_fundamentals(normalized_symbol)
+        except APIError as exc:
+            logger.info("Fundamentals unavailable for summary %s: %s", normalized_symbol, exc.code)
+
+        try:
+            announcements_response = get_announcements(normalized_symbol, limit=3)
+            announcements = announcements_response.items
+        except APIError as exc:
+            logger.info("Announcements unavailable for summary %s: %s", normalized_symbol, exc.code)
+
+    summary_result = _generate_llm_summary(
+        normalized_symbol,
+        resolved_quote,
+        resolved_news.items,
+        fundamentals,
+        announcements,
+    )
     if summary_result is None:
-        summary_result = _generate_rule_summary(normalized_symbol, quote, news.items, fundamentals, announcements)
+        summary_result = _generate_rule_summary(
+            normalized_symbol,
+            resolved_quote,
+            resolved_news.items,
+            fundamentals,
+            announcements,
+        )
 
-    latest_news_time = max((item.published_at for item in news.items), default=None)
+    latest_news_time = max((item.published_at for item in resolved_news.items), default=None)
 
     return SummaryResponse(
         symbol=normalized_symbol,
         generated_at=generated_at or datetime.now(timezone.utc),
         summary=summary_result.content,
         data_points=SummaryDataPoints(
-            price=quote.price,
-            change_percent=quote.change_percent,
-            news_count=len(news.items),
+            price=resolved_quote.price,
+            change_percent=resolved_quote.change_percent,
+            news_count=len(resolved_news.items),
         ),
         meta=SummaryMeta(
             provider=summary_result.meta.provider,
             model=summary_result.meta.model,
             is_fallback=summary_result.meta.is_fallback,
             force_refresh_used=force_refresh,
-            quote_provider=quote.provider,
-            quote_market_time=quote.market_time,
+            quote_provider=resolved_quote.provider,
+            quote_market_time=resolved_quote.market_time,
             latest_news_time=latest_news_time,
-            news_providers=news.providers,
+            news_providers=resolved_news.providers,
         ),
     )
 
 
+def _resolve_quote(symbol: str, quote: QuoteResponse | None, *, force_refresh: bool) -> QuoteResponse:
+    if quote is not None:
+        try:
+            if normalize_symbol(quote.symbol) == symbol:
+                return quote.model_copy(update={"symbol": symbol})
+        except APIError:
+            logger.info("Provided quote payload is invalid for %s; falling back to live fetch.", symbol)
+
+    return get_quote(symbol, force_refresh=force_refresh)
+
+
+def _resolve_news(
+    symbol: str,
+    *,
+    news_items: list[NewsItem] | None,
+    news_providers: list[str] | None,
+    force_refresh: bool,
+) -> NewsResponse:
+    if news_items:
+        items = news_items[:20]
+        providers = news_providers or _extract_news_providers(items)
+        return NewsResponse(
+            symbol=symbol,
+            count=len(items),
+            items=items,
+            providers=providers,
+        )
+
+    return get_news(symbol, limit=5, force_refresh=force_refresh)
+
+
+def _extract_news_providers(items: list[NewsItem]) -> list[str]:
+    providers: list[str] = []
+    seen: set[str] = set()
+
+    for item in items:
+        provider = item.source.split(" / ", 1)[0].strip()
+        if provider and provider not in seen:
+            seen.add(provider)
+            providers.append(provider)
+
+    return providers
+
+
 def _generate_llm_summary(
     symbol: str,
-    quote: Any,
+    quote: QuoteResponse,
     news_items: list[NewsItem],
     fundamentals: FundamentalsResponse | None,
     announcements: list[AnnouncementItem],
@@ -168,7 +243,7 @@ def _generate_llm_summary(
         client = OpenAI(
             api_key=settings.llm_api_key,
             base_url=settings.llm_base_url,
-            timeout=30.0,
+            timeout=LLM_SUMMARY_TIMEOUT_SECONDS,
         )
         completion = client.chat.completions.create(
             model=settings.llm_model,
@@ -235,7 +310,7 @@ def _extract_json_object(content: str) -> dict[str, Any]:
 
 def _generate_rule_summary(
     symbol: str,
-    quote: Any,
+    quote: QuoteResponse,
     news_items: list[NewsItem],
     fundamentals: FundamentalsResponse | None,
     announcements: list[AnnouncementItem],
@@ -278,8 +353,10 @@ def _generate_rule_summary(
             bullish.append(f"ROE 约为 {fundamentals.roe:.2f}%，资本回报率处于相对可接受区间。")
         elif fundamentals.roe is not None:
             bearish.append(f"ROE 约为 {fundamentals.roe:.2f}%，资本回报效率并不算强。")
+    elif announcements:
+        bullish.append(f"已补充 {len(announcements)} 条公告，可辅助验证近期正式披露信息。")
     else:
-        bearish.append("基本面数据当前不可用，无法进一步验证估值与盈利质量。")
+        bearish.append("本轮摘要未补充基本面和公告字段，更适合用于快速研判而非深度估值。")
 
     positive_announcement_hits = 0
     negative_announcement_hits = 0
@@ -364,8 +441,8 @@ def _build_conclusion(
         )
 
     return (
-        f"{symbol} 当前判断为{stance}。可以先结合价格变化与最近新闻做一轮快速筛选，"
-        "若要用于真实投资，请继续补充财报、公告原文和更高质量新闻源后再做决定。"
+        f"{symbol} 当前判断为{stance}。当前结论主要基于本轮最新行情与新闻生成，"
+        "更适合快速研判；若要用于真实投资，请继续补充财报、公告原文和更高质量新闻源后再做决定。"
     )
 
 

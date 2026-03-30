@@ -4,7 +4,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.market import QuoteResponse, SummaryContent, SummaryDataPoints, SummaryMeta, SummaryResponse
+from app.schemas.market import NewsItem, QuoteResponse, SummaryContent, SummaryDataPoints, SummaryMeta, SummaryResponse
+from app.services.summary import generate_summary
 
 
 client = TestClient(app)
@@ -62,4 +63,55 @@ def test_summary_route_defaults_to_force_refresh() -> None:
         assert mock_generate_summary.call_count == 1
         assert mock_generate_summary.call_args.args[0] == "AAPL"
         assert mock_generate_summary.call_args.kwargs["force_refresh"] is True
+        assert mock_generate_summary.call_args.kwargs["include_supplemental"] is False
+        assert mock_generate_summary.call_args.kwargs["quote"] is None
+        assert mock_generate_summary.call_args.kwargs["news_items"] == []
+        assert mock_generate_summary.call_args.kwargs["news_providers"] == []
         assert isinstance(mock_generate_summary.call_args.kwargs["generated_at"], datetime)
+
+
+def test_generate_summary_reuses_supplied_quote_and_news() -> None:
+    now = datetime.now(timezone.utc)
+    provided_quote = QuoteResponse(
+        symbol="AAPL",
+        price=189.12,
+        change=1.23,
+        change_percent=0.65,
+        currency="USD",
+        market_time=now,
+        provider="Yahoo Finance",
+    )
+    provided_news = [
+        NewsItem(
+            title="Apple launches new AI features",
+            url="https://example.com/apple-ai",
+            published_at=now,
+            source="Yahoo Finance",
+        )
+    ]
+
+    with (
+        patch("app.services.summary.get_quote") as mock_get_quote,
+        patch("app.services.summary.get_news") as mock_get_news,
+        patch("app.services.summary.get_fundamentals") as mock_get_fundamentals,
+        patch("app.services.summary.get_announcements") as mock_get_announcements,
+    ):
+        response = generate_summary(
+            "AAPL",
+            force_refresh=True,
+            quote=provided_quote,
+            news_items=provided_news,
+            news_providers=["Yahoo Finance"],
+            include_supplemental=False,
+        )
+
+        mock_get_quote.assert_not_called()
+        mock_get_news.assert_not_called()
+        mock_get_fundamentals.assert_not_called()
+        mock_get_announcements.assert_not_called()
+
+    assert response.symbol == "AAPL"
+    assert response.data_points.price == provided_quote.price
+    assert response.data_points.news_count == 1
+    assert response.meta.quote_provider == "Yahoo Finance"
+    assert response.meta.news_providers == ["Yahoo Finance"]

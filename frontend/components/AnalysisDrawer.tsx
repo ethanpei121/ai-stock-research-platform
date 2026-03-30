@@ -77,7 +77,7 @@ function AnalysisLoadingState({
       {
         id: "summary",
         label: "AI 正在撰写投研简报...",
-        detail: "基于本轮最新可获取行情与资讯生成摘要。",
+        detail: "直接复用本轮已抓到的行情与资讯生成摘要。",
         icon: <Sparkles className="h-4 w-4" />,
         state: getStepState(summarySection),
       },
@@ -133,6 +133,19 @@ function AnalysisLoadingState({
   );
 }
 
+function buildSummaryPrerequisiteError(quoteError: string | null, newsError: string | null): string {
+  if (quoteError && newsError) {
+    return `摘要未生成：行情和资讯都未成功获取。${quoteError}；${newsError}`;
+  }
+  if (quoteError) {
+    return `摘要未生成：行情获取失败。${quoteError}`;
+  }
+  if (newsError) {
+    return `摘要未生成：资讯获取失败。${newsError}`;
+  }
+  return "摘要未生成：本轮分析的前置数据未准备完成。";
+}
+
 export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisDrawerProps) {
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection());
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection());
@@ -160,20 +173,43 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
         return;
       }
 
+      let resolvedQuote: Quote | null = null;
+      let resolvedNews: NewsResponse | null = null;
+      let quoteError: string | null = null;
+      let newsError: string | null = null;
+
       if (quoteResult.status === "fulfilled") {
-        setQuoteSection({ status: "success", data: quoteResult.value, error: null });
+        resolvedQuote = quoteResult.value;
+        setQuoteSection({ status: "success", data: resolvedQuote, error: null });
       } else {
-        setQuoteSection({ status: "error", data: null, error: toErrorMessage(quoteResult.reason) });
+        quoteError = toErrorMessage(quoteResult.reason);
+        setQuoteSection({ status: "error", data: null, error: quoteError });
       }
 
       if (newsResult.status === "fulfilled") {
-        setNewsSection({ status: "success", data: newsResult.value, error: null });
+        resolvedNews = newsResult.value;
+        setNewsSection({ status: "success", data: resolvedNews, error: null });
       } else {
-        setNewsSection({ status: "error", data: null, error: toErrorMessage(newsResult.reason) });
+        newsError = toErrorMessage(newsResult.reason);
+        setNewsSection({ status: "error", data: null, error: newsError });
+      }
+
+      if (!resolvedQuote || !resolvedNews) {
+        setSummarySection({
+          status: "error",
+          data: null,
+          error: buildSummaryPrerequisiteError(quoteError, newsError),
+        });
+        return;
       }
 
       try {
-        const summary = await getSummary(normalized, { fresh: true });
+        const summary = await getSummary(normalized, {
+          fresh: true,
+          quote: resolvedQuote,
+          news: resolvedNews,
+          includeSupplemental: false,
+        });
         if (!cancelled) {
           setSummarySection({ status: "success", data: summary, error: null });
         }

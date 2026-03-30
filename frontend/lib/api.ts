@@ -16,6 +16,12 @@ type FreshOptions = {
   fresh?: boolean;
 };
 
+type SummaryOptions = FreshOptions & {
+  quote?: Quote | null;
+  news?: NewsResponse | null;
+  includeSupplemental?: boolean;
+};
+
 function buildUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${CLIENT_API_BASE}${normalizedPath}`;
@@ -255,11 +261,18 @@ export async function getNews(symbol: string, limit = 5, options?: FreshOptions)
   return normalizeNews(await request<unknown>(`/api/v1/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}${fresh}`));
 }
 
-export async function getSummary(symbol: string, options?: FreshOptions): Promise<SummaryResponse> {
+export async function getSummary(symbol: string, options?: SummaryOptions): Promise<SummaryResponse> {
   return normalizeSummary(
     await request<unknown>("/api/v1/summary", {
       method: "POST",
-      body: JSON.stringify({ symbol, fresh: options?.fresh ?? true }),
+      body: JSON.stringify({
+        symbol,
+        fresh: options?.fresh ?? true,
+        quote: options?.quote ?? undefined,
+        news_items: options?.news?.items ?? [],
+        news_providers: options?.news?.providers ?? [],
+        include_supplemental: options?.includeSupplemental ?? false,
+      }),
     })
   );
 }
