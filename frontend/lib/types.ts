@@ -44,6 +44,27 @@ export type SummaryResponse = {
   };
 };
 
+export type RecommendationEvidence = {
+  momentum_1m: number | null;
+  momentum_3m: number | null;
+  volume_ratio: number | null;
+  news_count_7d: number;
+  analyst_target_upside: number | null;
+  analyst_consensus: string | null;
+  analyst_opinion_count: number | null;
+  revenue_growth: number | null;
+  earnings_growth: number | null;
+};
+
+export type RecommendationScorecard = {
+  prosperity: number;
+  valuation: number;
+  fund_flow: number;
+  catalyst: number;
+  total: number;
+  label: string;
+};
+
 export type RecommendationStock = {
   symbol: string;
   company_name: string;
@@ -51,6 +72,10 @@ export type RecommendationStock = {
   region: string;
   rationale: string;
   tags: string[];
+  styles: string[];
+  scorecard: RecommendationScorecard;
+  evidence: RecommendationEvidence;
+  data_sources: string[];
 };
 
 export type RecommendationGroup = {
@@ -64,6 +89,9 @@ export type RecommendationGroup = {
 export type RecommendationsResponse = {
   updated_at: string;
   categories: string[];
+  style_filters: string[];
+  methodology: string;
+  data_sources: string[];
   groups: RecommendationGroup[];
 };
 

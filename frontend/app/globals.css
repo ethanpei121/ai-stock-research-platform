@@ -769,3 +769,150 @@ a {
     font-size: 1.8rem;
   }
 }
+.methodology-strip {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(23, 33, 43, 0.08);
+}
+
+.methodology-strip p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.filter-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.filter-group {
+  display: grid;
+  gap: 10px;
+}
+
+.filter-group__label {
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pick-row--research {
+  align-items: start;
+}
+
+.pick-row__topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.score-badge-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(23, 33, 43, 0.07);
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.score-cell,
+.metric-chip {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(23, 33, 43, 0.08);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.score-cell span,
+.metric-chip span {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.score-cell strong,
+.metric-chip strong {
+  font-size: 1rem;
+}
+
+.metric-chip-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tag-chip--style {
+  color: var(--teal);
+  background: rgba(15, 92, 105, 0.08);
+}
+
+.tag-chip--source {
+  color: var(--ink);
+  background: rgba(23, 33, 43, 0.05);
+}
+
+.source-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(23, 33, 43, 0.05);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 1080px) {
+  .score-grid,
+  .metric-chip-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .pick-row__topline {
+    display: grid;
+  }
+
+  .score-badge-group {
+    justify-content: flex-start;
+  }
+
+  .score-grid,
+  .metric-chip-row {
+    grid-template-columns: 1fr;
+  }
+}

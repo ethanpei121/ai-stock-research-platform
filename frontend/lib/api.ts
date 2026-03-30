@@ -2,7 +2,9 @@ import type {
   ApiErrorResponse,
   NewsResponse,
   Quote,
+  RecommendationEvidence,
   RecommendationGroup,
+  RecommendationScorecard,
   RecommendationsResponse,
   SummaryResponse,
 } from "@/lib/types";
@@ -55,6 +57,18 @@ function asString(value: unknown, fallback = ""): string {
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+
+function asNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
 }
 
 
@@ -142,6 +156,35 @@ function normalizeSummary(payload: unknown): SummaryResponse {
 }
 
 
+function normalizeRecommendationScorecard(payload: unknown): RecommendationScorecard {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  return {
+    prosperity: asNumber(data.prosperity, 3),
+    valuation: asNumber(data.valuation, 3),
+    fund_flow: asNumber(data.fund_flow, 3),
+    catalyst: asNumber(data.catalyst, 3),
+    total: asNumber(data.total, 3),
+    label: asString(data.label, "保持观察"),
+  };
+}
+
+
+function normalizeRecommendationEvidence(payload: unknown): RecommendationEvidence {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  return {
+    momentum_1m: asNullableNumber(data.momentum_1m),
+    momentum_3m: asNullableNumber(data.momentum_3m),
+    volume_ratio: asNullableNumber(data.volume_ratio),
+    news_count_7d: asNumber(data.news_count_7d),
+    analyst_target_upside: asNullableNumber(data.analyst_target_upside),
+    analyst_consensus: typeof data.analyst_consensus === "string" ? data.analyst_consensus : null,
+    analyst_opinion_count: asNullableNumber(data.analyst_opinion_count),
+    revenue_growth: asNullableNumber(data.revenue_growth),
+    earnings_growth: asNullableNumber(data.earnings_growth),
+  };
+}
+
+
 function normalizeRecommendationGroups(value: unknown): RecommendationGroup[] {
   if (!Array.isArray(value)) {
     return [];
@@ -158,9 +201,11 @@ function normalizeRecommendationGroups(value: unknown): RecommendationGroup[] {
             market: asString(stockRecord.market),
             region: asString(stockRecord.region),
             rationale: asString(stockRecord.rationale),
-            tags: Array.isArray(stockRecord.tags)
-              ? stockRecord.tags.map((item) => String(item)).filter(Boolean)
-              : [],
+            tags: asStringArray(stockRecord.tags),
+            styles: asStringArray(stockRecord.styles),
+            scorecard: normalizeRecommendationScorecard(stockRecord.scorecard),
+            evidence: normalizeRecommendationEvidence(stockRecord.evidence),
+            data_sources: asStringArray(stockRecord.data_sources),
           };
         })
       : [];
@@ -188,6 +233,9 @@ function normalizeRecommendations(payload: unknown): RecommendationsResponse {
     categories: Array.isArray(data.categories)
       ? data.categories.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
       : derivedCategories,
+    style_filters: asStringArray(data.style_filters),
+    methodology: asString(data.methodology, "推荐模块会基于真实公开数据动态生成结果。"),
+    data_sources: asStringArray(data.data_sources),
     groups,
   };
 }

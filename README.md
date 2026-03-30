@@ -1,6 +1,6 @@
 # ai-stock-research-platform
 
-AI Stock Research Platform 是一个面向 `Render + Vercel + Supabase` 的全栈 MVP，支持输入股票代码后快速查看最新行情、相关新闻、中文 AI 总结，以及按科技、制造、医药、能源、消费等细分赛道整理的推荐股票模块。项目保持单一 monorepo 结构：`backend/` 为 FastAPI API 服务，`frontend/` 为 Next.js App Router 前端。
+AI Stock Research Platform 是一个面向 `Render + Vercel + Supabase` 的全栈 MVP，支持输入股票代码后快速查看最新行情、相关新闻、中文 AI 总结，以及一个基于真实价格历史、成交量、新闻热度和分析师一致预期动态打分的推荐股票模块。项目保持单一 monorepo 结构：`backend/` 为 FastAPI API 服务，`frontend/` 为 Next.js App Router 前端。
 
 ## 在线演示
 
@@ -331,5 +331,6 @@ NEXT_PUBLIC_API_BASE=http://localhost:8000
 - 未配置 `ALPHA_VANTAGE_API_KEY` / `FINNHUB_API_KEY` 时，行情兜底能力会弱一些。
 - Render 与 Vercel 免费实例可能存在冷启动，首次请求会稍慢。
 - 本项目适合 Demo、研究入口和部署验证，不建议直接作为高频交易决策系统。
+
 
 

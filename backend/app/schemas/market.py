@@ -73,6 +73,31 @@ class SummaryResponse(BaseModel):
     meta: SummaryMeta
 
 
+class RecommendationEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    momentum_1m: float | None = None
+    momentum_3m: float | None = None
+    volume_ratio: float | None = None
+    news_count_7d: int = 0
+    analyst_target_upside: float | None = None
+    analyst_consensus: str | None = None
+    analyst_opinion_count: int | None = None
+    revenue_growth: float | None = None
+    earnings_growth: float | None = None
+
+
+class RecommendationScorecard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prosperity: int = Field(..., ge=1, le=5)
+    valuation: int = Field(..., ge=1, le=5)
+    fund_flow: int = Field(..., ge=1, le=5)
+    catalyst: int = Field(..., ge=1, le=5)
+    total: float = Field(..., ge=1, le=5)
+    label: str
+
+
 class RecommendationStock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -82,6 +107,10 @@ class RecommendationStock(BaseModel):
     region: str
     rationale: str
     tags: list[str] = Field(default_factory=list)
+    styles: list[str] = Field(default_factory=list)
+    scorecard: RecommendationScorecard
+    evidence: RecommendationEvidence
+    data_sources: list[str] = Field(default_factory=list)
 
 
 class RecommendationGroup(BaseModel):
@@ -99,4 +128,7 @@ class RecommendationsResponse(BaseModel):
 
     updated_at: datetime
     categories: list[str]
+    style_filters: list[str]
+    methodology: str
+    data_sources: list[str] = Field(default_factory=list)
     groups: list[RecommendationGroup]

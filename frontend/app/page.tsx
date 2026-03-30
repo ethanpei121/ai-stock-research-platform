@@ -56,6 +56,7 @@ export default function HomePage() {
   const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
   const [formError, setFormError] = useState<string | null>(null);
   const [selectedRecommendationCategory, setSelectedRecommendationCategory] = useState("全部");
+  const [selectedRecommendationStyle, setSelectedRecommendationStyle] = useState("全部");
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection("loading"));
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection("loading"));
   const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection("loading"));
@@ -128,6 +129,12 @@ export default function HomePage() {
           }
           return current;
         });
+        setSelectedRecommendationStyle((current) => {
+          if (current !== "全部" && !recommendations.style_filters.includes(current)) {
+            return "全部";
+          }
+          return current;
+        });
       } catch (error) {
         setRecommendationSection({ status: "error", data: null, error: toErrorMessage(error) });
       }
@@ -169,7 +176,9 @@ export default function HomePage() {
         <RecommendationsPanel
           section={recommendationSection}
           selectedCategory={selectedRecommendationCategory}
+          selectedStyle={selectedRecommendationStyle}
           onCategoryChange={setSelectedRecommendationCategory}
+          onStyleChange={setSelectedRecommendationStyle}
           onAnalyzeSymbol={handleRecommendationAnalyze}
         />
       </section>

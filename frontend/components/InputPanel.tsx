@@ -27,7 +27,8 @@ export function InputPanel({
           <p className="eyebrow">Research Desk / Live Memo</p>
           <h1>AI Stock Research Platform</h1>
           <p className="hero-copy">
-            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519 这样的 A 股输入；现在还增加了按科技、制造、医药、能源、消费等细分赛道整理的推荐股票模块，适合从主题筛选一路进入单票分析。
+            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519
+            这样的 A 股输入；推荐模块现在会基于真实行情、成交量、新闻热度和分析师一致预期动态打分，而不是展示静态推荐文案。
           </p>
         </div>
 
@@ -71,8 +72,8 @@ export function InputPanel({
             <strong>Yahoo Finance / Alpha Vantage / Finnhub</strong>
           </div>
           <div className="signal-chip">
-            <span>新闻渠道</span>
-            <strong>Yahoo Finance / Google News RSS / Alpha Vantage</strong>
+            <span>推荐依据</span>
+            <strong>价格历史 / 成交量 / 新闻热度 / 分析师一致预期</strong>
           </div>
           <div className="signal-chip signal-chip--wide">
             <span>API Base</span>
@@ -83,4 +84,3 @@ export function InputPanel({
     </section>
   );
 }
-
