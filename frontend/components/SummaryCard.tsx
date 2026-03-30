@@ -1,3 +1,5 @@
+import { Bot, ShieldAlert } from "lucide-react";
+
 import type { AsyncSection, SummaryResponse } from "@/lib/types";
 
 type SummaryCardProps = {
@@ -16,62 +18,99 @@ function getProviderLabel(section: AsyncSection<SummaryResponse>): string | null
   }
 
   const provider = meta.provider === "dashscope" ? "阿里云千问" : meta.provider === "openai" ? "OpenAI" : meta.provider;
-  const model = meta.model ? ` / ${meta.model}` : "";
-  return `${provider}${model}`;
+  return meta.model ? `${provider} / ${meta.model}` : provider;
+}
+
+
+function SummarySkeleton() {
+  return (
+    <div className="space-y-4 rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-4">
+        <div className="h-5 w-40 animate-pulse rounded bg-slate-200" />
+        <div className="h-6 w-28 animate-pulse rounded bg-slate-200" />
+      </div>
+      <div className="grid gap-4">
+        <div className="h-20 animate-pulse rounded bg-slate-50" />
+        <div className="h-20 animate-pulse rounded bg-slate-50" />
+        <div className="h-24 animate-pulse rounded bg-slate-50" />
+      </div>
+    </div>
+  );
 }
 
 
 export function SummaryCard({ section }: SummaryCardProps) {
   const providerLabel = getProviderLabel(section);
-  const bullish = section.status === "success" && section.data ? section.data.summary.bullish ?? [] : [];
-  const bearish = section.status === "success" && section.data ? section.data.summary.bearish ?? [] : [];
-  const conclusion = section.status === "success" && section.data ? section.data.summary.conclusion ?? "当前暂无可用结论。" : "";
-  const isFallback = section.status === "success" && section.data ? section.data.meta?.is_fallback ?? true : true;
+
+  if (section.status === "loading") {
+    return <SummarySkeleton />;
+  }
+
+  if (section.status === "error") {
+    return <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{section.error}</p>;
+  }
+
+  if (section.status !== "success" || !section.data) {
+    return <p className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">等待生成分析师备忘录。</p>;
+  }
+
+  const isFallback = section.data.meta?.is_fallback ?? true;
 
   return (
-    <article className="result-card result-card--summary">
-      <div className="result-card__header">
+    <section className="rounded-md border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="section-tag">Research Thesis</p>
-          <h2>Closing Note</h2>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Analyst Memo</p>
+          <h3 className="mt-2 text-lg font-semibold text-slate-900">AI 简报</h3>
         </div>
         {providerLabel ? (
-          <span className={`status-chip ${isFallback ? "status-chip--fallback" : "status-chip--live"}`}>
+          <span
+            className={`inline-flex items-center gap-2 rounded-md px-2.5 py-1 text-xs font-medium ${
+              isFallback ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            <Bot className="h-3.5 w-3.5" />
             {providerLabel}
           </span>
         ) : null}
       </div>
 
-      {section.status === "idle" ? <p className="empty-copy">等待模型形成研究结论。</p> : null}
-      {section.status === "loading" ? <p className="loading-copy">正在组织这只股票的最终判断...</p> : null}
-      {section.status === "error" ? <p className="error-copy">{section.error}</p> : null}
-
-      {section.status === "success" && section.data ? (
-        <div className="thesis-grid">
-          <section className="thesis-block">
-            <h3>Long Case</h3>
-            <ul className="bullet-list">
-              {bullish.map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
+      <div className="grid gap-4 px-5 py-5">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-900">
+              <Bot className="h-4 w-4 text-slate-500" />
+              利好因素
+            </div>
+            <ul className="space-y-2 pl-5 text-sm leading-6 text-slate-700">
+              {section.data.summary.bullish.map((item, index) => (
+                <li key={`${item}-${index}`} className="list-disc">
+                  {item}
+                </li>
               ))}
             </ul>
           </section>
 
-          <section className="thesis-block">
-            <h3>Risk Case</h3>
-            <ul className="bullet-list">
-              {bearish.map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
+          <section className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-900">
+              <ShieldAlert className="h-4 w-4 text-slate-500" />
+              风险因素
+            </div>
+            <ul className="space-y-2 pl-5 text-sm leading-6 text-slate-700">
+              {section.data.summary.bearish.map((item, index) => (
+                <li key={`${item}-${index}`} className="list-disc">
+                  {item}
+                </li>
               ))}
             </ul>
-          </section>
-
-          <section className="thesis-block thesis-block--conclusion">
-            <h3>Decision Memo</h3>
-            <p className="conclusion-copy">{conclusion}</p>
           </section>
         </div>
-      ) : null}
-    </article>
+
+        <section className="rounded-md border border-slate-200 bg-slate-900 px-4 py-4 text-white">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-300">Conclusion</p>
+          <p className="mt-3 text-sm leading-6 text-slate-100">{section.data.summary.conclusion}</p>
+        </section>
+      </div>
+    </section>
   );
 }

@@ -2,6 +2,10 @@
 
 这里预留产品文档、架构说明、接口设计和部署笔记。
 
+## 当前文档
+
+- [前端重设计基线报告](./frontend-redesign-report.md)
+
 当前后端已经支持的扩展数据源：
 
 - 行情与基本面：Yahoo Finance、AkShare / 东方财富、Tushare（可选）
