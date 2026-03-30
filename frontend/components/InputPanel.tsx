@@ -27,7 +27,7 @@ export function InputPanel({
           <p className="eyebrow">Research Desk / Live Memo</p>
           <h1>AI Stock Research Platform</h1>
           <p className="hero-copy">
-            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。输入代码后，页面会同时组织行情、事件和结论，适合演示也适合继续往真实产品迭代。
+            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519 这样的 A 股输入；页面会同时组织行情、事件和结论，适合演示也适合继续往真实产品迭代。
           </p>
         </div>
 
@@ -49,7 +49,7 @@ export function InputPanel({
               className="symbol-input"
               value={symbol}
               maxLength={10}
-              placeholder="例如 AAPL"
+              placeholder="例如 AAPL 或 300750"
               onChange={(event) => onSymbolChange(event.target.value.toUpperCase())}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -83,3 +83,4 @@ export function InputPanel({
     </section>
   );
 }
+

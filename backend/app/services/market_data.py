@@ -28,11 +28,14 @@ def normalize_symbol(symbol: str) -> str:
             code="INVALID_SYMBOL",
             message="股票代码不能为空，请输入类似 AAPL 的代码。",
         )
+
+    normalized = _normalize_regional_symbol(normalized)
+
     if not SYMBOL_PATTERN.fullmatch(normalized):
         raise APIError(
             status_code=400,
             code="INVALID_SYMBOL",
-            message="股票代码格式无效，请输入合法的美股代码。",
+            message="股票代码格式无效，请输入合法代码，例如 AAPL、300750.SZ、600519.SS。",
             details={"symbol": normalized},
         )
     return normalized
@@ -131,6 +134,19 @@ def _safe_fast_info(ticker: yf.Ticker) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("fast_info fetch failed: %s", exc)
         return {}
+
+
+def _normalize_regional_symbol(symbol: str) -> str:
+    if not symbol.isdigit() or len(symbol) != 6:
+        return symbol
+
+    if symbol.startswith(("0", "3")):
+        return f"{symbol}.SZ"
+    if symbol.startswith(("5", "6", "9")):
+        return f"{symbol}.SS"
+    if symbol.startswith(("4", "8")):
+        return f"{symbol}.BJ"
+    return symbol
 
 
 def _extract_latest_close(history_frame: Any) -> dict[str, Any] | None:
@@ -333,3 +349,4 @@ def _build_mock_news(symbol: str) -> list[NewsItem]:
             )
         )
     return items
+
