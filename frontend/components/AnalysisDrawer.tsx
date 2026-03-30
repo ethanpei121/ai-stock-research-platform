@@ -16,7 +16,6 @@ type AnalysisDrawerProps = {
   onClose: () => void;
 };
 
-
 type StepState = "loading" | "done" | "error" | "pending";
 
 type StepDefinition = {
@@ -27,18 +26,15 @@ type StepDefinition = {
   state: StepState;
 };
 
-
 const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSection<T> => ({
   status,
   data: null,
   error: null,
 });
 
-
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
 }
-
 
 function getStepState<T>(section: AsyncSection<T>): StepState {
   if (section.status === "success") {
@@ -53,7 +49,6 @@ function getStepState<T>(section: AsyncSection<T>): StepState {
   return "pending";
 }
 
-
 function AnalysisLoadingState({
   quoteSection,
   newsSection,
@@ -67,22 +62,22 @@ function AnalysisLoadingState({
     () => [
       {
         id: "quote",
-        label: "正在获取实时行情...",
-        detail: "拉取最新价格、涨跌幅与市场时间。",
+        label: "正在获取最新可用行情...",
+        detail: "直连刷新最新价格、涨跌幅与市场时间。",
         icon: <LineChart className="h-4 w-4" />,
         state: getStepState(quoteSection),
       },
       {
         id: "news",
         label: "正在拉取最新资讯...",
-        detail: "聚合相关新闻与最新事件来源。",
+        detail: "重新抓取新闻聚合源，避免沿用旧缓存。",
         icon: <Newspaper className="h-4 w-4" />,
         state: getStepState(newsSection),
       },
       {
         id: "summary",
         label: "AI 正在撰写投研简报...",
-        detail: "生成利好、风险与结论摘要。",
+        detail: "基于本轮最新可获取行情与资讯生成摘要。",
         icon: <Sparkles className="h-4 w-4" />,
         state: getStepState(summarySection),
       },
@@ -138,7 +133,6 @@ function AnalysisLoadingState({
   );
 }
 
-
 export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisDrawerProps) {
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection());
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection());
@@ -157,7 +151,10 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
       setNewsSection(createSection("loading"));
       setSummarySection(createSection("loading"));
 
-      const [quoteResult, newsResult] = await Promise.allSettled([getQuote(normalized), getNews(normalized, 6)]);
+      const [quoteResult, newsResult] = await Promise.allSettled([
+        getQuote(normalized, { fresh: true }),
+        getNews(normalized, 6, { fresh: true }),
+      ]);
 
       if (cancelled) {
         return;
@@ -176,7 +173,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
       }
 
       try {
-        const summary = await getSummary(normalized);
+        const summary = await getSummary(normalized, { fresh: true });
         if (!cancelled) {
           setSummarySection({ status: "success", data: summary, error: null });
         }

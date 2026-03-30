@@ -9,16 +9,17 @@ import type {
   SummaryResponse,
 } from "@/lib/types";
 
-
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(/\/+$/, "");
 const CLIENT_API_BASE = "";
 
+type FreshOptions = {
+  fresh?: boolean;
+};
 
 function buildUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${CLIENT_API_BASE}${normalizedPath}`;
 }
-
 
 async function parseError(response: Response): Promise<Error> {
   const fallbackMessage = `Request failed with status ${response.status}`;
@@ -37,7 +38,6 @@ async function parseError(response: Response): Promise<Error> {
   }
 }
 
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(buildUrl(path), {
     ...init,
@@ -55,28 +55,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
-
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-
 function asNullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
 }
-
 
 function normalizeQuote(payload: unknown): Quote {
   const data = (payload ?? {}) as Record<string, unknown>;
@@ -90,7 +89,6 @@ function normalizeQuote(payload: unknown): Quote {
     provider: asString(data.provider, "Yahoo Finance"),
   };
 }
-
 
 function normalizeNews(payload: unknown): NewsResponse {
   const data = (payload ?? {}) as Record<string, unknown>;
@@ -126,7 +124,6 @@ function normalizeNews(payload: unknown): NewsResponse {
   };
 }
 
-
 function normalizeSummary(payload: unknown): SummaryResponse {
   const data = (payload ?? {}) as Record<string, unknown>;
   const summary = (data.summary ?? {}) as Record<string, unknown>;
@@ -157,10 +154,14 @@ function normalizeSummary(payload: unknown): SummaryResponse {
       provider: asString(meta.provider, "template"),
       model: typeof meta.model === "string" ? meta.model : null,
       is_fallback: typeof meta.is_fallback === "boolean" ? meta.is_fallback : true,
+      force_refresh_used: typeof meta.force_refresh_used === "boolean" ? meta.force_refresh_used : false,
+      quote_provider: asNullableString(meta.quote_provider),
+      quote_market_time: asNullableString(meta.quote_market_time),
+      latest_news_time: asNullableString(meta.latest_news_time),
+      news_providers: asStringArray(meta.news_providers),
     },
   };
 }
-
 
 function normalizeRecommendationScorecard(payload: unknown): RecommendationScorecard {
   const data = (payload ?? {}) as Record<string, unknown>;
@@ -173,7 +174,6 @@ function normalizeRecommendationScorecard(payload: unknown): RecommendationScore
     label: asString(data.label, "保持观察"),
   };
 }
-
 
 function normalizeRecommendationEvidence(payload: unknown): RecommendationEvidence {
   const data = (payload ?? {}) as Record<string, unknown>;
@@ -189,7 +189,6 @@ function normalizeRecommendationEvidence(payload: unknown): RecommendationEviden
     earnings_growth: asNullableNumber(data.earnings_growth),
   };
 }
-
 
 function normalizeRecommendationGroups(value: unknown): RecommendationGroup[] {
   if (!Array.isArray(value)) {
@@ -226,7 +225,6 @@ function normalizeRecommendationGroups(value: unknown): RecommendationGroup[] {
   });
 }
 
-
 function normalizeRecommendations(payload: unknown): RecommendationsResponse {
   const data = (payload ?? {}) as Record<string, unknown>;
   const groups = normalizeRecommendationGroups(data.groups);
@@ -247,26 +245,24 @@ function normalizeRecommendations(payload: unknown): RecommendationsResponse {
   };
 }
 
-
-export async function getQuote(symbol: string): Promise<Quote> {
-  return normalizeQuote(await request<unknown>(`/api/v1/quote?symbol=${encodeURIComponent(symbol)}`));
+export async function getQuote(symbol: string, options?: FreshOptions): Promise<Quote> {
+  const fresh = options?.fresh ? "&fresh=true" : "";
+  return normalizeQuote(await request<unknown>(`/api/v1/quote?symbol=${encodeURIComponent(symbol)}${fresh}`));
 }
 
-
-export async function getNews(symbol: string, limit = 5): Promise<NewsResponse> {
-  return normalizeNews(await request<unknown>(`/api/v1/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}`));
+export async function getNews(symbol: string, limit = 5, options?: FreshOptions): Promise<NewsResponse> {
+  const fresh = options?.fresh ? "&fresh=true" : "";
+  return normalizeNews(await request<unknown>(`/api/v1/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}${fresh}`));
 }
 
-
-export async function getSummary(symbol: string): Promise<SummaryResponse> {
+export async function getSummary(symbol: string, options?: FreshOptions): Promise<SummaryResponse> {
   return normalizeSummary(
     await request<unknown>("/api/v1/summary", {
       method: "POST",
-      body: JSON.stringify({ symbol }),
+      body: JSON.stringify({ symbol, fresh: options?.fresh ?? true }),
     })
   );
 }
-
 
 export async function getRecommendations(): Promise<RecommendationsResponse> {
   return normalizeRecommendations(await request<unknown>("/api/v1/recommendations"));

@@ -21,8 +21,8 @@ router = APIRouter(prefix="/api/v1", tags=["market"])
 
 
 @router.get("/quote", response_model=QuoteResponse)
-def quote(symbol: str) -> QuoteResponse:
-    return get_quote(symbol)
+def quote(symbol: str, fresh: bool = False) -> QuoteResponse:
+    return get_quote(symbol, force_refresh=fresh)
 
 
 @router.get("/fundamentals", response_model=FundamentalsResponse)
@@ -31,9 +31,9 @@ def fundamentals(symbol: str) -> FundamentalsResponse:
 
 
 @router.get("/news", response_model=NewsResponse)
-def news(symbol: str, limit: int = 5) -> NewsResponse:
+def news(symbol: str, limit: int = 5, fresh: bool = False) -> NewsResponse:
     validated_limit = validate_news_limit(limit)
-    return get_news(symbol, validated_limit)
+    return get_news(symbol, validated_limit, force_refresh=fresh)
 
 
 @router.get("/announcements", response_model=AnnouncementsResponse)
@@ -44,7 +44,7 @@ def announcements(symbol: str, limit: int = 5) -> AnnouncementsResponse:
 
 @router.post("/summary", response_model=SummaryResponse)
 def summary(payload: SummaryRequest) -> SummaryResponse:
-    return generate_summary(payload.symbol, generated_at=datetime.now(timezone.utc))
+    return generate_summary(payload.symbol, generated_at=datetime.now(timezone.utc), force_refresh=payload.fresh)
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)

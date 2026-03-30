@@ -61,10 +61,10 @@ class SummaryGenerationResult:
     meta: SummaryMeta
 
 
-def generate_summary(symbol: str, generated_at: datetime | None = None) -> SummaryResponse:
+def generate_summary(symbol: str, generated_at: datetime | None = None, *, force_refresh: bool = True) -> SummaryResponse:
     normalized_symbol = normalize_symbol(symbol)
-    quote = get_quote(normalized_symbol)
-    news = get_news(normalized_symbol, limit=5)
+    quote = get_quote(normalized_symbol, force_refresh=force_refresh)
+    news = get_news(normalized_symbol, limit=5, force_refresh=force_refresh)
 
     fundamentals: FundamentalsResponse | None = None
     try:
@@ -83,6 +83,8 @@ def generate_summary(symbol: str, generated_at: datetime | None = None) -> Summa
     if summary_result is None:
         summary_result = _generate_rule_summary(normalized_symbol, quote, news.items, fundamentals, announcements)
 
+    latest_news_time = max((item.published_at for item in news.items), default=None)
+
     return SummaryResponse(
         symbol=normalized_symbol,
         generated_at=generated_at or datetime.now(timezone.utc),
@@ -92,7 +94,16 @@ def generate_summary(symbol: str, generated_at: datetime | None = None) -> Summa
             change_percent=quote.change_percent,
             news_count=len(news.items),
         ),
-        meta=summary_result.meta,
+        meta=SummaryMeta(
+            provider=summary_result.meta.provider,
+            model=summary_result.meta.model,
+            is_fallback=summary_result.meta.is_fallback,
+            force_refresh_used=force_refresh,
+            quote_provider=quote.provider,
+            quote_market_time=quote.market_time,
+            latest_news_time=latest_news_time,
+            news_providers=news.providers,
+        ),
     )
 
 

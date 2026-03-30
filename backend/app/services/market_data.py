@@ -81,12 +81,13 @@ def validate_news_limit(limit: int) -> int:
     return limit
 
 
-def get_quote(symbol: str) -> QuoteResponse:
+def get_quote(symbol: str, *, force_refresh: bool = False) -> QuoteResponse:
     normalized_symbol = normalize_symbol(symbol)
 
-    cached_quote = QUOTE_CACHE.get(normalized_symbol)
-    if cached_quote is not None:
-        return cached_quote
+    if not force_refresh:
+        cached_quote = QUOTE_CACHE.get(normalized_symbol)
+        if cached_quote is not None:
+            return cached_quote
 
     settings = get_settings()
     fetchers: list[tuple[str, Any]] = []
@@ -140,14 +141,18 @@ def get_quote(symbol: str) -> QuoteResponse:
     )
 
 
-def get_news(symbol: str, limit: int = 5) -> NewsResponse:
+def get_news(symbol: str, limit: int = 5, *, force_refresh: bool = False) -> NewsResponse:
     normalized_symbol = normalize_symbol(symbol)
     validated_limit = validate_news_limit(limit)
 
-    cached_items = NEWS_CACHE.get(normalized_symbol)
-    if cached_items is None:
+    if force_refresh:
         cached_items = _fetch_news_items(normalized_symbol)
         NEWS_CACHE.set(normalized_symbol, cached_items)
+    else:
+        cached_items = NEWS_CACHE.get(normalized_symbol)
+        if cached_items is None:
+            cached_items = _fetch_news_items(normalized_symbol)
+            NEWS_CACHE.set(normalized_symbol, cached_items)
 
     items = cached_items[:validated_limit]
     return NewsResponse(
@@ -746,6 +751,8 @@ def _build_mock_news(symbol: str) -> list[NewsItem]:
             )
         )
     return items
+
+
 
 
 

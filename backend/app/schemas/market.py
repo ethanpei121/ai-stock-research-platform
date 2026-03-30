@@ -78,6 +78,7 @@ class SummaryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     symbol: str = Field(..., min_length=1)
+    fresh: bool = True
 
 
 class SummaryContent(BaseModel):
@@ -102,6 +103,11 @@ class SummaryMeta(BaseModel):
     provider: str
     model: str | None = None
     is_fallback: bool
+    force_refresh_used: bool = False
+    quote_provider: str | None = None
+    quote_market_time: datetime | None = None
+    latest_news_time: datetime | None = None
+    news_providers: list[str] = Field(default_factory=list)
 
 
 class SummaryResponse(BaseModel):

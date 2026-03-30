@@ -42,6 +42,11 @@ export type SummaryResponse = {
     provider: string;
     model: string | null;
     is_fallback: boolean;
+    force_refresh_used: boolean;
+    quote_provider: string | null;
+    quote_market_time: string | null;
+    latest_news_time: string | null;
+    news_providers: string[];
   };
 };
 

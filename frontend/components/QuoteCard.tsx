@@ -9,7 +9,6 @@ type QuoteCardProps = {
   section: AsyncSection<Quote>;
 };
 
-
 function QuoteLoadingState() {
   return (
     <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
@@ -18,14 +17,13 @@ function QuoteLoadingState() {
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-slate-900">正在获取实时行情...</p>
+          <p className="text-sm font-semibold text-slate-900">正在获取最新可用行情...</p>
           <p className="mt-1 text-sm text-slate-500">价格、涨跌幅和市场时间就绪后会立即展示。</p>
         </div>
       </div>
     </section>
   );
 }
-
 
 export function QuoteCard({ symbol, section }: QuoteCardProps) {
   if (section.status === "loading") {
