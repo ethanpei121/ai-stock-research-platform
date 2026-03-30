@@ -21,13 +21,19 @@ function buildUrl(path: string): string {
 
 
 async function parseError(response: Response): Promise<Error> {
+  const fallbackMessage = `Request failed with status ${response.status}`;
+  const rawText = await response.text();
+
+  if (!rawText) {
+    return new Error(fallbackMessage);
+  }
+
   try {
-    const payload = (await response.json()) as ApiErrorResponse;
+    const payload = JSON.parse(rawText) as ApiErrorResponse;
     const message = payload.error?.message;
-    return new Error(message || `Request failed with status ${response.status}`);
+    return new Error(message || rawText || fallbackMessage);
   } catch {
-    const text = await response.text();
-    return new Error(text || `Request failed with status ${response.status}`);
+    return new Error(rawText || fallbackMessage);
   }
 }
 
