@@ -13,7 +13,6 @@ from app.services.market_data import get_news, get_quote, normalize_symbol
 
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 POSITIVE_KEYWORDS = (
     "beat",
@@ -42,7 +41,7 @@ def generate_summary(symbol: str, generated_at: datetime | None = None) -> Summa
     quote = get_quote(normalized_symbol)
     news = get_news(normalized_symbol, limit=5)
 
-    summary_content = _generate_openai_summary(normalized_symbol, quote, news.items)
+    summary_content = _generate_llm_summary(normalized_symbol, quote, news.items)
     if summary_content is None:
         summary_content = _generate_rule_summary(normalized_symbol, quote, news.items)
 
@@ -58,8 +57,9 @@ def generate_summary(symbol: str, generated_at: datetime | None = None) -> Summa
     )
 
 
-def _generate_openai_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryContent | None:
-    if not settings.openai_api_key:
+def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryContent | None:
+    settings = get_settings()
+    if not settings.llm_api_key:
         return None
 
     payload = {
@@ -83,19 +83,22 @@ def _generate_openai_summary(symbol: str, quote: Any, news_items: list[NewsItem]
     }
 
     try:
-        client = OpenAI(api_key=settings.openai_api_key, timeout=20.0)
+        client = OpenAI(
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_base_url,
+            timeout=30.0,
+        )
         completion = client.chat.completions.create(
-            model=settings.openai_model,
+            model=settings.llm_model,
             temperature=0.2,
-            response_format={"type": "json_object"},
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "你是一名谨慎的中文股票研究助理。"
-                        "请仅输出 JSON，对象字段必须是 bullish、bearish、conclusion。"
+                        "请仅输出一个 JSON 对象，字段必须是 bullish、bearish、conclusion。"
                         "bullish 和 bearish 必须是中文字符串数组，每个数组 2 到 4 条；"
-                        "conclusion 必须是 1 段中文结论。不要输出额外字段。"
+                        "conclusion 必须是 1 段中文结论。不要输出 markdown 解释。"
                     ),
                 },
                 {
@@ -105,15 +108,40 @@ def _generate_openai_summary(symbol: str, quote: Any, news_items: list[NewsItem]
             ],
         )
         content = completion.choices[0].message.content or ""
-        parsed = json.loads(content)
+        parsed = _extract_json_object(content)
         return SummaryContent(
             bullish=_coerce_points(parsed.get("bullish"), minimum=2),
             bearish=_coerce_points(parsed.get("bearish"), minimum=2),
             conclusion=_coerce_conclusion(parsed.get("conclusion")),
         )
     except Exception as exc:
-        logger.exception("OpenAI summary generation failed, falling back to rule template.", exc_info=exc)
+        logger.exception("LLM summary generation failed, falling back to rule template.", exc_info=exc)
         return None
+
+
+def _extract_json_object(content: str) -> dict[str, Any]:
+    stripped = content.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.strip("`")
+        if stripped.startswith("json"):
+            stripped = stripped[4:].strip()
+
+    try:
+        parsed = json.loads(stripped)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    start_index = stripped.find("{")
+    end_index = stripped.rfind("}")
+    if start_index != -1 and end_index != -1 and end_index > start_index:
+        candidate = stripped[start_index : end_index + 1]
+        parsed = json.loads(candidate)
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise ValueError("LLM response is not valid JSON.")
 
 
 def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryContent:

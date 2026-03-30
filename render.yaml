@@ -16,3 +16,11 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
+      - key: OPENAI_BASE_URL
+        sync: false
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: DASHSCOPE_MODEL
+        value: qwen3-vl-8b-thinking
+      - key: DASHSCOPE_BASE_URL
+        value: https://dashscope.aliyuncs.com/compatible-mode/v1

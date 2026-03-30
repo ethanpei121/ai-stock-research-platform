@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        enable_decoding=False,
     )
 
     app_env: str = "development"
@@ -33,6 +34,10 @@ class Settings(BaseSettings):
     cors_allow_origins: list[str] = ["http://localhost:3000"]
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
+    openai_base_url: str | None = None
+    dashscope_api_key: str | None = None
+    dashscope_model: str | None = None
+    dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
@@ -67,6 +72,20 @@ class Settings(BaseSettings):
         if not self.database_url:
             return None
         return normalize_database_url(self.database_url)
+
+    @property
+    def llm_api_key(self) -> str | None:
+        return self.dashscope_api_key or self.openai_api_key
+
+    @property
+    def llm_model(self) -> str:
+        return self.dashscope_model or self.openai_model
+
+    @property
+    def llm_base_url(self) -> str | None:
+        if self.dashscope_api_key:
+            return self.dashscope_base_url
+        return self.openai_base_url
 
 
 @lru_cache
