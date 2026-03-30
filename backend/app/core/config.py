@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     dashscope_api_key: str | None = None
     dashscope_model: str | None = None
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    alpha_vantage_api_key: str | None = None
+    finnhub_api_key: str | None = None
 
     @field_validator("cors_allow_origins", mode="before")
     @classmethod

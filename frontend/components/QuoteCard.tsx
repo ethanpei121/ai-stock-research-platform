@@ -19,6 +19,9 @@ export function QuoteCard({ symbol, section }: QuoteCardProps) {
         <div>
           <p className="section-tag">Market Tape</p>
           <h2>{symbol}</h2>
+          {section.status === "success" && section.data ? (
+            <p className="section-note">当前行情命中渠道: {section.data.provider}</p>
+          ) : null}
         </div>
         {section.status === "success" && section.data ? (
           <span className={`quote-direction ${toneClass}`}>
@@ -55,8 +58,8 @@ export function QuoteCard({ symbol, section }: QuoteCardProps) {
               <strong>{section.data.currency}</strong>
             </div>
             <div className="ledger-cell">
-              <span>Signal</span>
-              <strong>{section.data.change_percent >= 0 ? "Risk-On" : "Risk-Off"}</strong>
+              <span>Provider</span>
+              <strong>{section.data.provider}</strong>
             </div>
           </div>
         </>

@@ -27,7 +27,7 @@ export function InputPanel({
           <p className="eyebrow">Research Desk / Live Memo</p>
           <h1>AI Stock Research Platform</h1>
           <p className="hero-copy">
-            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519 这样的 A 股输入；页面会同时组织行情、事件和结论，适合演示也适合继续往真实产品迭代。
+            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519 这样的 A 股输入；后端现在会组合多路行情与新闻来源，演示时更稳，后续也更容易继续扩容。
           </p>
         </div>
 
@@ -49,7 +49,7 @@ export function InputPanel({
               className="symbol-input"
               value={symbol}
               maxLength={10}
-              placeholder="例如 AAPL 或 300750"
+              placeholder="例如 AAPL、MSFT、300750"
               onChange={(event) => onSymbolChange(event.target.value.toUpperCase())}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -67,12 +67,12 @@ export function InputPanel({
 
         <div className="control-deck__right">
           <div className="signal-chip">
-            <span>数据源</span>
-            <strong>yfinance + Render API</strong>
+            <span>行情渠道</span>
+            <strong>Yahoo Finance / Alpha Vantage / Finnhub</strong>
           </div>
           <div className="signal-chip">
-            <span>摘要引擎</span>
-            <strong>{summarySourceLabel ?? "等待模型返回"}</strong>
+            <span>新闻渠道</span>
+            <strong>Yahoo Finance / Google News RSS / Alpha Vantage</strong>
           </div>
           <div className="signal-chip signal-chip--wide">
             <span>API Base</span>
@@ -83,4 +83,3 @@ export function InputPanel({
     </section>
   );
 }
-

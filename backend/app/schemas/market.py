@@ -12,6 +12,7 @@ class QuoteResponse(BaseModel):
     change_percent: float
     currency: str
     market_time: datetime
+    provider: str
 
 
 class NewsItem(BaseModel):
@@ -29,6 +30,7 @@ class NewsResponse(BaseModel):
     symbol: str
     count: int
     items: list[NewsItem]
+    providers: list[str] = Field(default_factory=list)
 
 
 class SummaryRequest(BaseModel):

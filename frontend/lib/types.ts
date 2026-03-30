@@ -7,6 +7,7 @@ export type Quote = {
   change_percent: number;
   currency: string;
   market_time: string;
+  provider: string;
 };
 
 export type NewsItem = {
@@ -20,6 +21,7 @@ export type NewsResponse = {
   symbol: string;
   count: number;
   items: NewsItem[];
+  providers: string[];
 };
 
 export type SummaryResponse = {

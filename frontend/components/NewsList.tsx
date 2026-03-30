@@ -13,6 +13,9 @@ export function NewsList({ section }: NewsListProps) {
         <div>
           <p className="section-tag">Catalyst Feed</p>
           <h2>Event Watch</h2>
+          {section.status === "success" && section.data && section.data.providers.length > 0 ? (
+            <p className="section-note">聚合来源: {section.data.providers.join(" / ")}</p>
+          ) : null}
         </div>
       </div>
 
