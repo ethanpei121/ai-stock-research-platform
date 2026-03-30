@@ -44,6 +44,29 @@ export type SummaryResponse = {
   };
 };
 
+export type RecommendationStock = {
+  symbol: string;
+  company_name: string;
+  market: string;
+  region: string;
+  rationale: string;
+  tags: string[];
+};
+
+export type RecommendationGroup = {
+  id: string;
+  category: string;
+  subcategory: string;
+  description: string;
+  stocks: RecommendationStock[];
+};
+
+export type RecommendationsResponse = {
+  updated_at: string;
+  categories: string[];
+  groups: RecommendationGroup[];
+};
+
 export type ApiErrorResponse = {
   error?: {
     code?: string;

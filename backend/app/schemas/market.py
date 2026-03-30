@@ -71,3 +71,32 @@ class SummaryResponse(BaseModel):
     summary: SummaryContent
     data_points: SummaryDataPoints
     meta: SummaryMeta
+
+
+class RecommendationStock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    company_name: str
+    market: str
+    region: str
+    rationale: str
+    tags: list[str] = Field(default_factory=list)
+
+
+class RecommendationGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    category: str
+    subcategory: str
+    description: str
+    stocks: list[RecommendationStock]
+
+
+class RecommendationsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    updated_at: datetime
+    categories: list[str]
+    groups: list[RecommendationGroup]

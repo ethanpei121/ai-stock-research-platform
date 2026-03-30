@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { InputPanel } from "@/components/InputPanel";
 import { NewsList } from "@/components/NewsList";
 import { QuoteCard } from "@/components/QuoteCard";
+import { RecommendationsPanel } from "@/components/RecommendationsPanel";
 import { SummaryCard } from "@/components/SummaryCard";
-import { API_TARGET, getNews, getQuote, getSummary } from "@/lib/api";
-import type { AsyncSection, NewsResponse, Quote, SummaryResponse } from "@/lib/types";
+import { API_TARGET, getNews, getQuote, getRecommendations, getSummary } from "@/lib/api";
+import type {
+  AsyncSection,
+  NewsResponse,
+  Quote,
+  RecommendationsResponse,
+  SummaryResponse,
+} from "@/lib/types";
 
 
 const DEFAULT_SYMBOL = "AAPL";
@@ -48,10 +55,12 @@ export default function HomePage() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
   const [formError, setFormError] = useState<string | null>(null);
+  const [selectedRecommendationCategory, setSelectedRecommendationCategory] = useState("全部");
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection("loading"));
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection("loading"));
   const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection("loading"));
-  const hasAutoAnalyzed = useRef(false);
+  const [recommendationSection, setRecommendationSection] = useState<AsyncSection<RecommendationsResponse>>(createSection("loading"));
+  const hasBootstrapped = useRef(false);
 
   const isSubmitting =
     quoteSection.status === "loading" ||
@@ -60,7 +69,7 @@ export default function HomePage() {
 
   const summarySourceLabel = getSummarySourceLabel(summarySection);
 
-  const runAnalysis = async (nextSymbol: string) => {
+  const runAnalysis = useCallback(async (nextSymbol: string) => {
     const normalized = nextSymbol.trim().toUpperCase();
     if (!normalized) {
       setFormError("请输入有效的股票代码，例如 AAPL。");
@@ -71,6 +80,7 @@ export default function HomePage() {
     }
 
     setFormError(null);
+    setSymbol(normalized);
     setActiveSymbol(normalized);
     setQuoteSection(createSection("loading"));
     setNewsSection(createSection("loading"));
@@ -99,18 +109,37 @@ export default function HomePage() {
     } catch (error) {
       setSummarySection({ status: "error", data: null, error: toErrorMessage(error) });
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (hasAutoAnalyzed.current) {
+    if (hasBootstrapped.current) {
       return;
     }
-    hasAutoAnalyzed.current = true;
+    hasBootstrapped.current = true;
     void runAnalysis(DEFAULT_SYMBOL);
-  }, []);
+    void (async () => {
+      setRecommendationSection(createSection("loading"));
+      try {
+        const recommendations = await getRecommendations();
+        setRecommendationSection({ status: "success", data: recommendations, error: null });
+        setSelectedRecommendationCategory((current) => {
+          if (current !== "全部" && !recommendations.categories.includes(current)) {
+            return "全部";
+          }
+          return current;
+        });
+      } catch (error) {
+        setRecommendationSection({ status: "error", data: null, error: toErrorMessage(error) });
+      }
+    })();
+  }, [runAnalysis]);
 
   const handleAnalyze = async () => {
     await runAnalysis(symbol);
+  };
+
+  const handleRecommendationAnalyze = (recommendedSymbol: string) => {
+    void runAnalysis(recommendedSymbol);
   };
 
   return (
@@ -136,8 +165,14 @@ export default function HomePage() {
           <SummaryCard section={summarySection} />
           <NewsList section={newsSection} />
         </section>
+
+        <RecommendationsPanel
+          section={recommendationSection}
+          selectedCategory={selectedRecommendationCategory}
+          onCategoryChange={setSelectedRecommendationCategory}
+          onAnalyzeSymbol={handleRecommendationAnalyze}
+        />
       </section>
     </main>
   );
 }
-

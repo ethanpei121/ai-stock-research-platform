@@ -116,7 +116,8 @@ a {
 }
 
 .hero-panel,
-.result-card {
+.result-card,
+.recommendation-panel {
   position: relative;
   border: 1px solid var(--line);
   border-radius: 30px;
@@ -127,7 +128,8 @@ a {
 }
 
 .hero-panel::after,
-.result-card::after {
+.result-card::after,
+.recommendation-panel::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -137,7 +139,8 @@ a {
 }
 
 .hero-panel,
-.result-card {
+.result-card,
+.recommendation-panel {
   animation: rise-in 560ms ease both;
 }
 
@@ -147,6 +150,10 @@ a {
 
 .result-card--news {
   animation-delay: 120ms;
+}
+
+.recommendation-panel {
+  animation-delay: 170ms;
 }
 
 .hero-panel {
@@ -164,18 +171,22 @@ a {
 
 .masthead-copy h1,
 .result-card h2,
+.recommendation-panel h2,
 .focus-panel strong,
 .quote-price,
 .status-chip,
 .ledger-cell strong,
-.signal-chip strong {
+.signal-chip strong,
+.theme-card h3,
+.pick-row__head strong {
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
 }
 
 .eyebrow,
 .section-tag,
 .focus-panel__label,
-.quote-label {
+.quote-label,
+.theme-card__eyebrow {
   margin: 0 0 12px;
   color: var(--teal);
   font-size: 0.78rem;
@@ -268,7 +279,9 @@ a {
   box-shadow: 0 14px 26px rgba(17, 26, 34, 0.2);
 }
 
-.primary-button:hover:not(:disabled) {
+.primary-button:hover:not(:disabled),
+.category-pill:hover,
+.pick-row:hover {
   transform: translateY(-1px);
 }
 
@@ -336,7 +349,8 @@ a {
   grid-column: span 3;
 }
 
-.result-card__header {
+.result-card__header,
+.recommendation-panel__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -344,7 +358,8 @@ a {
   margin-bottom: 18px;
 }
 
-.result-card h2 {
+.result-card h2,
+.recommendation-panel h2 {
   margin: 0;
   font-size: 2rem;
   line-height: 0.95;
@@ -352,9 +367,12 @@ a {
 }
 
 .quote-direction,
-.status-chip {
+.status-chip,
+.category-pill,
+.pick-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 8px 12px;
   border-radius: 999px;
   font-size: 0.88rem;
@@ -499,6 +517,156 @@ a {
   line-height: 1.8;
 }
 
+.recommendation-panel {
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.recommendation-meta {
+  display: grid;
+  gap: 8px;
+  text-align: right;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.category-pill {
+  border: 1px solid rgba(23, 33, 43, 0.1);
+  background: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.category-pill--active {
+  color: #fdf9f1;
+  background: linear-gradient(135deg, var(--ink) 0%, #25303c 100%);
+  border-color: rgba(23, 33, 43, 0.2);
+}
+
+.recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.theme-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(23, 33, 43, 0.08);
+}
+
+.theme-card__header {
+  display: grid;
+  gap: 10px;
+}
+
+.theme-card__header h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.theme-card__header p:last-child {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.theme-card__stocks {
+  display: grid;
+  gap: 12px;
+}
+
+.pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(23, 33, 43, 0.08);
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  text-align: left;
+}
+
+.pick-row:hover {
+  box-shadow: 0 14px 24px rgba(17, 26, 34, 0.08);
+  border-color: rgba(15, 92, 105, 0.22);
+}
+
+.pick-row__main {
+  display: grid;
+  gap: 10px;
+}
+
+.pick-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.pick-row__head strong {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.pick-row__head span,
+.pick-row__main p {
+  color: var(--ink-soft);
+}
+
+.pick-row__main p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.pick-action {
+  color: var(--teal);
+  background: rgba(15, 92, 105, 0.08);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: rgba(23, 33, 43, 0.06);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.tag-chip--market {
+  color: var(--teal);
+  background: rgba(15, 92, 105, 0.1);
+}
+
+.tag-chip--region {
+  color: var(--amber);
+  background: rgba(168, 109, 31, 0.1);
+}
+
 .status-chip--live {
   color: var(--teal);
   background: var(--teal-soft);
@@ -507,6 +675,13 @@ a {
 .status-chip--fallback {
   color: var(--amber);
   background: var(--amber-soft);
+}
+
+.section-note {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.6;
 }
 
 @keyframes rise-in {
@@ -522,7 +697,8 @@ a {
 
 @media (max-width: 1080px) {
   .hero-panel__headline,
-  .control-deck {
+  .control-deck,
+  .recommendation-grid {
     grid-template-columns: 1fr;
   }
 
@@ -537,6 +713,14 @@ a {
   .result-card--news {
     grid-column: span 12;
   }
+
+  .recommendation-panel__header {
+    display: grid;
+  }
+
+  .recommendation-meta {
+    text-align: left;
+  }
 }
 
 @media (max-width: 720px) {
@@ -545,17 +729,20 @@ a {
   }
 
   .hero-panel,
-  .result-card {
+  .result-card,
+  .recommendation-panel {
     border-radius: 24px;
   }
 
   .hero-panel,
-  .result-card {
+  .result-card,
+  .recommendation-panel {
     padding: 18px;
   }
 
   .input-row,
   .quote-ledger,
+  .pick-row,
   .result-card--quote,
   .result-card--summary,
   .result-card--news {
@@ -563,29 +750,22 @@ a {
   }
 
   .input-row,
-  .quote-ledger {
+  .quote-ledger,
+  .pick-row {
     grid-template-columns: 1fr;
   }
 
   .primary-button,
-  .status-chip {
+  .status-chip,
+  .pick-action {
     width: 100%;
     justify-content: center;
   }
 
   .focus-panel strong,
-.result-card h2 {
+  .result-card h2,
+  .recommendation-panel h2,
+  .theme-card h3 {
     font-size: 1.8rem;
   }
 }
-
-
-
-
-.section-note {
-  margin: 12px 0 0;
-  color: var(--ink-soft);
-  font-size: 0.92rem;
-  line-height: 1.6;
-}
-

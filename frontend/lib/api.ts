@@ -1,4 +1,11 @@
-import type { ApiErrorResponse, NewsResponse, Quote, SummaryResponse } from "@/lib/types";
+import type {
+  ApiErrorResponse,
+  NewsResponse,
+  Quote,
+  RecommendationGroup,
+  RecommendationsResponse,
+  SummaryResponse,
+} from "@/lib/types";
 
 
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(/\/+$/, "");
@@ -135,6 +142,57 @@ function normalizeSummary(payload: unknown): SummaryResponse {
 }
 
 
+function normalizeRecommendationGroups(value: unknown): RecommendationGroup[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((group) => {
+    const record = (group ?? {}) as Record<string, unknown>;
+    const stocks = Array.isArray(record.stocks)
+      ? record.stocks.map((stock) => {
+          const stockRecord = (stock ?? {}) as Record<string, unknown>;
+          return {
+            symbol: asString(stockRecord.symbol),
+            company_name: asString(stockRecord.company_name),
+            market: asString(stockRecord.market),
+            region: asString(stockRecord.region),
+            rationale: asString(stockRecord.rationale),
+            tags: Array.isArray(stockRecord.tags)
+              ? stockRecord.tags.map((item) => String(item)).filter(Boolean)
+              : [],
+          };
+        })
+      : [];
+
+    return {
+      id: asString(record.id),
+      category: asString(record.category),
+      subcategory: asString(record.subcategory),
+      description: asString(record.description),
+      stocks,
+    };
+  });
+}
+
+
+function normalizeRecommendations(payload: unknown): RecommendationsResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const groups = normalizeRecommendationGroups(data.groups);
+  const derivedCategories = Array.from(
+    new Set(groups.map((group) => group.category).filter((value) => value.length > 0))
+  );
+
+  return {
+    updated_at: asString(data.updated_at, new Date().toISOString()),
+    categories: Array.isArray(data.categories)
+      ? data.categories.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      : derivedCategories,
+    groups,
+  };
+}
+
+
 export async function getQuote(symbol: string): Promise<Quote> {
   return normalizeQuote(await request<unknown>(`/api/v1/quote?symbol=${encodeURIComponent(symbol)}`));
 }
@@ -152,4 +210,9 @@ export async function getSummary(symbol: string): Promise<SummaryResponse> {
       body: JSON.stringify({ symbol }),
     })
   );
+}
+
+
+export async function getRecommendations(): Promise<RecommendationsResponse> {
+  return normalizeRecommendations(await request<unknown>("/api/v1/recommendations"));
 }

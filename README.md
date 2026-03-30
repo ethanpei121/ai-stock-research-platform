@@ -1,6 +1,6 @@
 # ai-stock-research-platform
 
-AI Stock Research Platform 是一个面向 `Render + Vercel + Supabase` 的全栈 MVP，支持输入股票代码后快速查看最新行情、相关新闻，以及中文 AI 总结。项目保持单一 monorepo 结构：`backend/` 为 FastAPI API 服务，`frontend/` 为 Next.js App Router 前端。
+AI Stock Research Platform 是一个面向 `Render + Vercel + Supabase` 的全栈 MVP，支持输入股票代码后快速查看最新行情、相关新闻、中文 AI 总结，以及按科技、制造、医药、能源、消费等细分赛道整理的推荐股票模块。项目保持单一 monorepo 结构：`backend/` 为 FastAPI API 服务，`frontend/` 为 Next.js App Router 前端。
 
 ## 在线演示
 
@@ -70,6 +70,7 @@ pytest -q
 - `GET http://localhost:8000/api/v1/quote?symbol=AAPL`
 - `GET http://localhost:8000/api/v1/quote?symbol=300750`
 - `GET http://localhost:8000/api/v1/news?symbol=AAPL&limit=5`
+- `GET http://localhost:8000/api/v1/recommendations`
 - `POST http://localhost:8000/api/v1/summary`
 
 ### 2. 启动前端
@@ -239,6 +240,37 @@ NEXT_PUBLIC_API_BASE=http://localhost:8000
 
 说明：优先聚合 `Yahoo Finance News`，同时会尝试 `Google News RSS`；如果配置了 `ALPHA_VANTAGE_API_KEY`，也会自动加入新闻聚合。外部新闻都失败时，系统会回退到 `mock:fallback` 演示数据。
 
+### `GET /api/v1/recommendations`
+
+成功示例：
+
+```json
+{
+  "updated_at": "2026-03-30T12:00:00+00:00",
+  "categories": ["科技", "制造", "医药", "金融", "消费", "能源", "原材料", "基建与公用事业"],
+  "groups": [
+    {
+      "id": "tech-ai-infra",
+      "category": "科技",
+      "subcategory": "AI算力与云基础设施",
+      "description": "聚焦算力资本开支、企业级 AI 部署和云平台定价权。",
+      "stocks": [
+        {
+          "symbol": "NVDA",
+          "company_name": "英伟达",
+          "market": "US",
+          "region": "美国",
+          "rationale": "GPU 与 AI 训练生态护城河最强。",
+          "tags": ["AI", "GPU", "龙头"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+说明：返回按行业与细分赛道分组的推荐股票清单，前端可直接点击任意标的进入单票分析。
+
 ### `POST /api/v1/summary`
 
 请求体：
@@ -299,3 +331,5 @@ NEXT_PUBLIC_API_BASE=http://localhost:8000
 - 未配置 `ALPHA_VANTAGE_API_KEY` / `FINNHUB_API_KEY` 时，行情兜底能力会弱一些。
 - Render 与 Vercel 免费实例可能存在冷启动，首次请求会稍慢。
 - 本项目适合 Demo、研究入口和部署验证，不建议直接作为高频交易决策系统。
+
+

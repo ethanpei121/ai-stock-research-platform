@@ -27,7 +27,7 @@ export function InputPanel({
           <p className="eyebrow">Research Desk / Live Memo</p>
           <h1>AI Stock Research Platform</h1>
           <p className="hero-copy">
-            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519 这样的 A 股输入；后端现在会组合多路行情与新闻来源，演示时更稳，后续也更容易继续扩容。
+            用一页研究简报的方式看一只股票，而不是一个千篇一律的 AI 面板。支持美股代码，也兼容像 300750、600519 这样的 A 股输入；现在还增加了按科技、制造、医药、能源、消费等细分赛道整理的推荐股票模块，适合从主题筛选一路进入单票分析。
           </p>
         </div>
 
@@ -83,3 +83,4 @@ export function InputPanel({
     </section>
   );
 }
+
