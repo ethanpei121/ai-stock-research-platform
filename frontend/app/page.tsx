@@ -6,7 +6,7 @@ import { InputPanel } from "@/components/InputPanel";
 import { NewsList } from "@/components/NewsList";
 import { QuoteCard } from "@/components/QuoteCard";
 import { SummaryCard } from "@/components/SummaryCard";
-import { API_BASE, getNews, getQuote, getSummary } from "@/lib/api";
+import { API_TARGET, getNews, getQuote, getSummary } from "@/lib/api";
 import type { AsyncSection, NewsResponse, Quote, SummaryResponse } from "@/lib/types";
 
 
@@ -123,7 +123,7 @@ export default function HomePage() {
         <InputPanel
           symbol={symbol}
           activeSymbol={activeSymbol}
-          apiBase={API_BASE}
+          apiBase={`Vercel Proxy -> ${API_TARGET}`}
           isSubmitting={isSubmitting}
           error={formError}
           summarySourceLabel={summarySourceLabel}
@@ -140,3 +140,4 @@ export default function HomePage() {
     </main>
   );
 }
+

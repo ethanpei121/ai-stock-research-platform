@@ -1,14 +1,13 @@
 import type { ApiErrorResponse, NewsResponse, Quote, SummaryResponse } from "@/lib/types";
 
 
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(
-  /\/+$/,
-  ""
-);
+export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(/\/+$/, "");
+const CLIENT_API_BASE = "";
 
 
 function buildUrl(path: string): string {
-  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${CLIENT_API_BASE}${normalizedPath}`;
 }
 
 
@@ -103,9 +102,9 @@ function normalizeNews(payload: unknown): NewsResponse {
 
 function normalizeSummary(payload: unknown): SummaryResponse {
   const data = (payload ?? {}) as Record<string, unknown>;
-  const summary = ((data.summary ?? {}) as Record<string, unknown>);
-  const meta = ((data.meta ?? {}) as Record<string, unknown>);
-  const dataPoints = ((data.data_points ?? {}) as Record<string, unknown>);
+  const summary = (data.summary ?? {}) as Record<string, unknown>;
+  const meta = (data.meta ?? {}) as Record<string, unknown>;
+  const dataPoints = (data.data_points ?? {}) as Record<string, unknown>;
 
   const bullish = Array.isArray(summary.bullish)
     ? summary.bullish.map((item) => String(item)).filter(Boolean)
