@@ -24,6 +24,25 @@ function toErrorMessage(error: unknown): string {
 }
 
 
+function getSummarySourceLabel(section: AsyncSection<SummaryResponse>): string | null {
+  if (section.status === "loading") {
+    return "研究引擎正在更新中";
+  }
+
+  if (section.status !== "success" || !section.data) {
+    return null;
+  }
+
+  if (section.data.meta.is_fallback) {
+    return "当前使用模板回退";
+  }
+
+  const provider = section.data.meta.provider === "dashscope" ? "阿里云千问" : "OpenAI";
+  const model = section.data.meta.model ? ` · ${section.data.meta.model}` : "";
+  return `${provider}${model}`;
+}
+
+
 export default function HomePage() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
@@ -37,6 +56,8 @@ export default function HomePage() {
     quoteSection.status === "loading" ||
     newsSection.status === "loading" ||
     summarySection.status === "loading";
+
+  const summarySourceLabel = getSummarySourceLabel(summarySection);
 
   const runAnalysis = async (nextSymbol: string) => {
     const normalized = nextSymbol.trim().toUpperCase();
@@ -93,23 +114,26 @@ export default function HomePage() {
 
   return (
     <main className="app-shell">
-      <div className="aurora aurora--left" />
-      <div className="aurora aurora--right" />
+      <div className="page-grain" />
+      <div className="page-halo page-halo--amber" />
+      <div className="page-halo page-halo--teal" />
 
-      <section className="dashboard">
+      <section className="stage">
         <InputPanel
           symbol={symbol}
+          activeSymbol={activeSymbol}
           apiBase={API_BASE}
           isSubmitting={isSubmitting}
           error={formError}
+          summarySourceLabel={summarySourceLabel}
           onSymbolChange={setSymbol}
           onSubmit={handleAnalyze}
         />
 
-        <section className="results-grid">
+        <section className="result-mosaic">
           <QuoteCard symbol={activeSymbol} section={quoteSection} />
-          <NewsList section={newsSection} />
           <SummaryCard section={summarySection} />
+          <NewsList section={newsSection} />
         </section>
       </section>
     </main>
