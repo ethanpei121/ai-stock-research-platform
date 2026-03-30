@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { Suspense } from "react";
 
 import { HomePageClient } from "@/components/HomePageClient";
@@ -5,22 +6,16 @@ import { HomePageClient } from "@/components/HomePageClient";
 
 function HomePageFallback() {
   return (
-    <main className="space-y-6">
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_360px]">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="h-4 w-32 animate-pulse rounded bg-slate-200" />
-          <div className="mt-4 h-8 w-2/3 animate-pulse rounded bg-slate-200" />
-          <div className="mt-4 h-16 animate-pulse rounded bg-slate-100" />
+    <main className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex max-w-md items-center gap-4 rounded-2xl bg-white px-6 py-5 shadow-sm ring-1 ring-slate-900/5">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+          <Loader2 className="h-5 w-5 animate-spin" />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-          <div className="h-28 rounded-lg border border-slate-200 bg-white shadow-sm" />
-          <div className="h-28 rounded-lg border border-slate-200 bg-white shadow-sm" />
-          <div className="h-28 rounded-lg border border-slate-200 bg-white shadow-sm sm:col-span-2 xl:col-span-1" />
+        <div>
+          <p className="text-sm font-semibold text-slate-900">正在加载市场工作台</p>
+          <p className="mt-1 text-sm text-slate-500">推荐池、搜索入口与分析面板正在准备中。</p>
         </div>
-      </section>
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="h-72 animate-pulse rounded bg-slate-100" />
-      </section>
+      </div>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { Activity, Database, PanelRightOpen } from "lucide-react";
+import { Activity, Database, PanelRightOpen, TrendingUp } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -27,6 +28,27 @@ function toErrorMessage(error: unknown): string {
 }
 
 
+function InfoCard({
+  icon,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+      <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">{icon}</span>
+        {title}
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-500">{description}</p>
+    </div>
+  );
+}
+
+
 export function HomePageClient() {
   const router = useRouter();
   const pathname = usePathname();
@@ -43,7 +65,7 @@ export function HomePageClient() {
   const [recommendationQuoteSnapshots, setRecommendationQuoteSnapshots] = useState<RecommendationQuoteMap>({});
 
   const activeSymbol = (searchParams.get("symbol") ?? "").trim().toUpperCase();
-  const isDrawerOpen = activeSymbol.length > 0;
+  const isPanelOpen = activeSymbol.length > 0;
 
   const data = recommendationSection.status === "success" ? recommendationSection.data : null;
   let activeCompanyName: string | null = null;
@@ -156,74 +178,83 @@ export function HomePageClient() {
   };
 
   return (
-    <>
-      <main className="space-y-6">
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_360px]">
-          <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">Market Overview</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">首页只保留发现与推荐，个股分析改为右侧按需展开。</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500">
-              现在的交互更接近企业级金融终端：首页用于浏览观察名单与市场快照，个股详情则通过右侧抽屉加载。这样能让推荐、搜索、分析三类动作分层清晰，也便于后续增加个股详情页和更多数据模块。
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-900">
-                <PanelRightOpen className="h-4 w-4 text-slate-500" />
-                分析入口
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-500">点击列表中的股票，或在顶部输入代码回车，即可从右侧拉出个股分析抽屉。</p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-900">
-                <Activity className="h-4 w-4 text-slate-500" />
-                数据说明
-              </div>
-              <p className="mt-3 text-sm leading-6 text-slate-500">
-                推荐池默认展示固定观察名单，但会回补行情快照；点击“刷新实时推荐”时，才会向后端请求真实数据重排。
+    <main className="space-y-6">
+      <div
+        className={`grid items-start gap-6 transition-[grid-template-columns] duration-300 ease-out ${
+          isPanelOpen ? "xl:grid-cols-[minmax(0,1.5fr)_minmax(380px,1fr)]" : "xl:grid-cols-1"
+        }`}
+      >
+        <div className={`space-y-6 transition-[max-width] duration-300 ${isPanelOpen ? "" : "mx-auto w-full max-w-6xl"}`}>
+          <section className={`grid gap-4 ${isPanelOpen ? "2xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]" : "xl:grid-cols-[minmax(0,1.45fr)_360px]"}`}>
+            <div className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-900/5 sm:p-7">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-600">Market Overview</p>
+              <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
+                推荐池是主视图，分析面板是从视图，左侧始终保持可浏览和可操作。
+              </h2>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-500">
+                整个页面现在更像现代 Fintech 工作台：左侧负责市场发现、筛选与快速决策，右侧负责单票深度分析。即使 AI 正在右侧生成投研简报，你仍然可以继续在左侧浏览其他股票并即时切换分析对象。
               </p>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 xl:col-span-1">
-              <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-900">
-                <Database className="h-4 w-4 text-slate-500" />
-                Proxy & Update
-              </div>
-              <div className="mt-3 space-y-2 text-sm text-slate-500">
-                <p>
-                  API Proxy: <span className="font-mono text-slate-900">Vercel /api/v1 -&gt; {API_TARGET}</span>
-                </p>
-                <p>
-                  观察池时间戳: <span className="font-mono text-slate-900">{formatDateTime(DEFAULT_RECOMMENDATIONS.updated_at)}</span>
-                </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">
+                  默认首页: 推荐观察池
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-900/5">
+                  代理链路: Vercel /api/v1 -&gt; {API_TARGET}
+                </span>
+                {isPanelOpen ? (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                    当前正在查看 {activeSymbol}
+                  </span>
+                ) : null}
               </div>
             </div>
-          </div>
-        </section>
 
-        <RecommendationsWorkspace
-          section={recommendationSection}
-          quoteSnapshots={recommendationQuoteSnapshots}
-          activeSymbol={activeSymbol}
-          selectedCategory={selectedRecommendationCategory}
-          selectedStyle={selectedRecommendationStyle}
-          isRefreshing={isRecommendationRefreshing}
-          refreshError={recommendationRefreshError}
-          onCategoryChange={setSelectedRecommendationCategory}
-          onStyleChange={setSelectedRecommendationStyle}
-          onOpenSymbol={updateDrawerSymbol}
-          onRefresh={refreshRecommendations}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+              <InfoCard
+                icon={<PanelRightOpen className="h-4 w-4" />}
+                title="主从分屏"
+                description="选中股票后，页面会平滑切换为左右分屏，右侧加载不会阻塞左侧浏览与点击。"
+              />
+              <InfoCard
+                icon={<Activity className="h-4 w-4" />}
+                title="非阻塞加载"
+                description="右侧分析采用步骤式加载提示，行情、新闻和总结会按进度逐步填充，而不是整块骨架屏。"
+              />
+              <InfoCard
+                icon={<Database className="h-4 w-4" />}
+                title="Proxy & Update"
+                description={`固定观察池时间戳 ${formatDateTime(DEFAULT_RECOMMENDATIONS.updated_at)}，点击刷新按钮时会切到实时推荐模式。`}
+              />
+              <InfoCard
+                icon={<TrendingUp className="h-4 w-4" />}
+                title="金融终端风格"
+                description="整体改为更现代的 SaaS 金融终端视觉，使用 ring、阴影、圆角和 Indigo 点缀增强层级感。"
+              />
+            </div>
+          </section>
+
+          <RecommendationsWorkspace
+            section={recommendationSection}
+            quoteSnapshots={recommendationQuoteSnapshots}
+            activeSymbol={activeSymbol}
+            selectedCategory={selectedRecommendationCategory}
+            selectedStyle={selectedRecommendationStyle}
+            isRefreshing={isRecommendationRefreshing}
+            refreshError={recommendationRefreshError}
+            onCategoryChange={setSelectedRecommendationCategory}
+            onStyleChange={setSelectedRecommendationStyle}
+            onOpenSymbol={updateDrawerSymbol}
+            onRefresh={refreshRecommendations}
+          />
+        </div>
+
+        <AnalysisDrawer
+          symbol={activeSymbol || null}
+          companyName={activeCompanyName}
+          open={isPanelOpen}
+          onClose={() => updateDrawerSymbol(null)}
         />
-      </main>
-
-      <AnalysisDrawer
-        symbol={activeSymbol || null}
-        companyName={activeCompanyName}
-        open={isDrawerOpen}
-        onClose={() => updateDrawerSymbol(null)}
-      />
-    </>
+      </div>
+    </main>
   );
 }
