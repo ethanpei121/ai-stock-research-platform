@@ -5,12 +5,12 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AI Stock Research Platform",
-  description: "Deploy-ready Next.js frontend for the AI Stock Research Platform."
+  description: "A demo-ready stock quote, news, and AI summary dashboard built with Next.js and FastAPI.",
 };
 
 
 export default function RootLayout({
-  children
+  children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {

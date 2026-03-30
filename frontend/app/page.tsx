@@ -2,63 +2,99 @@
 
 import { useState } from "react";
 
-import { API_BASE, checkBackendHealth, type HealthResponse } from "@/lib/api";
+import { InputPanel } from "@/components/InputPanel";
+import { NewsList } from "@/components/NewsList";
+import { QuoteCard } from "@/components/QuoteCard";
+import { SummaryCard } from "@/components/SummaryCard";
+import { API_BASE, getNews, getQuote, getSummary } from "@/lib/api";
+import type { AsyncSection, NewsResponse, Quote, SummaryResponse } from "@/lib/types";
 
 
-const idleMessage = {
-  status: "idle",
-  message: "点击按钮检查后端健康状态"
-};
+const DEFAULT_SYMBOL = "AAPL";
+
+const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSection<T> => ({
+  status,
+  data: null,
+  error: null,
+});
+
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "请求失败，请稍后重试。";
+}
 
 
 export default function HomePage() {
-  const [response, setResponse] = useState<HealthResponse | typeof idleMessage>(idleMessage);
-  const [error, setError] = useState<string | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
+  const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
+  const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection());
+  const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection());
+  const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection());
 
-  const handleHealthCheck = async () => {
-    setIsChecking(true);
-    setError(null);
+  const isSubmitting =
+    quoteSection.status === "loading" ||
+    newsSection.status === "loading" ||
+    summarySection.status === "loading";
+
+  const handleAnalyze = async () => {
+    const normalized = symbol.trim().toUpperCase();
+    if (!normalized) {
+      setFormError("请输入有效的股票代码，例如 AAPL。");
+      return;
+    }
+
+    setFormError(null);
+    setActiveSymbol(normalized);
+    setQuoteSection(createSection("loading"));
+    setNewsSection(createSection("loading"));
+    setSummarySection(createSection("loading"));
+
+    const [quoteResult, newsResult] = await Promise.allSettled([
+      getQuote(normalized),
+      getNews(normalized, 5),
+    ]);
+
+    if (quoteResult.status === "fulfilled") {
+      setQuoteSection({ status: "success", data: quoteResult.value, error: null });
+    } else {
+      setQuoteSection({ status: "error", data: null, error: toErrorMessage(quoteResult.reason) });
+    }
+
+    if (newsResult.status === "fulfilled") {
+      setNewsSection({ status: "success", data: newsResult.value, error: null });
+    } else {
+      setNewsSection({ status: "error", data: null, error: toErrorMessage(newsResult.reason) });
+    }
 
     try {
-      const result = await checkBackendHealth();
-      setResponse(result);
-    } catch (requestError) {
-      const message =
-        requestError instanceof Error
-          ? requestError.message
-          : "请求失败，请确认后端服务和 CORS 配置是否正确。";
-      setError(message);
-    } finally {
-      setIsChecking(false);
+      const summary = await getSummary(normalized);
+      setSummarySection({ status: "success", data: summary, error: null });
+    } catch (error) {
+      setSummarySection({ status: "error", data: null, error: toErrorMessage(error) });
     }
   };
 
   return (
-    <main className="page-shell">
-      <section className="hero-card">
-        <p className="eyebrow">Render + Vercel + Supabase Ready</p>
-        <h1>AI Stock Research Platform</h1>
-        <p className="lead">
-          一个可直接接入 Supabase Postgres，并分别部署到 Render 与 Vercel 的全栈基础骨架。
-        </p>
+    <main className="app-shell">
+      <div className="aurora aurora--left" />
+      <div className="aurora aurora--right" />
 
-        <div className="actions">
-          <button
-            className="primary-button"
-            type="button"
-            onClick={handleHealthCheck}
-            disabled={isChecking}
-          >
-            {isChecking ? "检查中..." : "检查后端健康"}
-          </button>
-          <p className="api-base">API Base: {API_BASE}</p>
-        </div>
+      <section className="dashboard">
+        <InputPanel
+          symbol={symbol}
+          apiBase={API_BASE}
+          isSubmitting={isSubmitting}
+          error={formError}
+          onSymbolChange={setSymbol}
+          onSubmit={handleAnalyze}
+        />
 
-        <div className={`status-panel ${error ? "status-panel-error" : ""}`}>
-          <p className="status-label">最近一次响应</p>
-          <pre>{JSON.stringify(error ? { error } : response, null, 2)}</pre>
-        </div>
+        <section className="results-grid">
+          <QuoteCard symbol={activeSymbol} section={quoteSection} />
+          <NewsList section={newsSection} />
+          <SummaryCard section={summarySection} />
+        </section>
       </section>
     </main>
   );

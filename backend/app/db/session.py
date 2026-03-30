@@ -1,6 +1,7 @@
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
@@ -30,7 +31,7 @@ SessionLocal = (
 )
 
 
-def get_engine():
+def get_engine() -> Engine:
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured.")
     return engine

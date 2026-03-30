@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -17,9 +18,7 @@ def normalize_database_url(database_url: str) -> str:
     query_params = dict(parse_qsl(parsed_url.query, keep_blank_values=True))
     query_params.setdefault("sslmode", "require")
 
-    return urlunparse(
-        parsed_url._replace(query=urlencode(query_params))
-    )
+    return urlunparse(parsed_url._replace(query=urlencode(query_params)))
 
 
 class Settings(BaseSettings):
@@ -32,6 +31,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str | None = None
     cors_allow_origins: list[str] = ["http://localhost:3000"]
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
 
     @field_validator("cors_allow_origins", mode="before")
     @classmethod
@@ -39,10 +40,27 @@ class Settings(BaseSettings):
         if value is None:
             return []
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            stripped_value = value.strip()
+            if not stripped_value:
+                return []
+            if stripped_value.startswith("["):
+                try:
+                    parsed_value = json.loads(stripped_value)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("CORS_ALLOW_ORIGINS JSON format is invalid.") from exc
+
+                if not isinstance(parsed_value, list):
+                    raise ValueError("CORS_ALLOW_ORIGINS JSON format must be an array.")
+                return [
+                    str(origin).strip() for origin in parsed_value if str(origin).strip()
+                ]
+
+            return [origin.strip() for origin in stripped_value.split(",") if origin.strip()]
         if isinstance(value, list):
             return [str(origin).strip() for origin in value if str(origin).strip()]
-        raise TypeError("CORS_ALLOW_ORIGINS must be a comma-separated string or list")
+        raise ValueError(
+            "CORS_ALLOW_ORIGINS must be a JSON array string, comma-separated string, or list."
+        )
 
     @property
     def normalized_database_url(self) -> str | None:
