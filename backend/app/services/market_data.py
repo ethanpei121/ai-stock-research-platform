@@ -15,6 +15,14 @@ from app.core.cache import TTLCache
 from app.core.config import get_settings
 from app.core.errors import APIError
 from app.schemas.market import NewsItem, NewsResponse, QuoteResponse
+from app.services.company_data import (
+    AKSHARE_QUOTE_PROVIDER,
+    SupplementalProviderNotFoundError,
+    SupplementalProviderUnavailableError,
+    fetch_eastmoney_news_items,
+    fetch_quote_from_akshare,
+    is_a_share_symbol,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -81,9 +89,11 @@ def get_quote(symbol: str) -> QuoteResponse:
         return cached_quote
 
     settings = get_settings()
-    fetchers: list[tuple[str, Any]] = [
-        (YAHOO_FINANCE_PROVIDER, lambda: _fetch_quote_from_yfinance(normalized_symbol)),
-    ]
+    fetchers: list[tuple[str, Any]] = []
+    if is_a_share_symbol(normalized_symbol):
+        fetchers.append((AKSHARE_QUOTE_PROVIDER, lambda: fetch_quote_from_akshare(normalized_symbol)))
+
+    fetchers.append((YAHOO_FINANCE_PROVIDER, lambda: _fetch_quote_from_yfinance(normalized_symbol)))
 
     if settings.alpha_vantage_api_key:
         fetchers.append(
@@ -107,10 +117,10 @@ def get_quote(symbol: str) -> QuoteResponse:
         try:
             quote = fetcher()
             return QUOTE_CACHE.set(normalized_symbol, quote)
-        except ProviderNotFoundError as exc:
+        except (ProviderNotFoundError, SupplementalProviderNotFoundError) as exc:
             not_found_seen = True
             logger.info("Quote not found from %s for %s: %s", provider_name, normalized_symbol, exc)
-        except ProviderUnavailableError as exc:
+        except (ProviderUnavailableError, SupplementalProviderUnavailableError) as exc:
             unavailable_providers.append(provider_name)
             logger.warning("Quote provider %s unavailable for %s: %s", provider_name, normalized_symbol, exc)
 
@@ -287,6 +297,9 @@ def _fetch_quote_from_finnhub(symbol: str, api_key: str) -> QuoteResponse:
 
 def _fetch_news_items(symbol: str) -> list[NewsItem]:
     aggregated_items: list[NewsItem] = []
+
+    if is_a_share_symbol(symbol):
+        aggregated_items.extend(fetch_eastmoney_news_items(symbol))
 
     aggregated_items.extend(_fetch_yfinance_news_items(symbol))
 
@@ -733,3 +746,6 @@ def _build_mock_news(symbol: str) -> list[NewsItem]:
             )
         )
     return items
+
+
+

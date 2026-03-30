@@ -33,6 +33,47 @@ class NewsResponse(BaseModel):
     providers: list[str] = Field(default_factory=list)
 
 
+class AnnouncementItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    url: str
+    published_at: datetime
+    source: str
+    category: str | None = None
+
+
+class AnnouncementsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    count: int
+    items: list[AnnouncementItem]
+    providers: list[str] = Field(default_factory=list)
+
+
+class FundamentalsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    as_of: datetime
+    providers: list[str] = Field(default_factory=list)
+    company_name: str | None = None
+    industry: str | None = None
+    listed_date: str | None = None
+    market_cap: float | None = None
+    float_market_cap: float | None = None
+    pe_ratio: float | None = None
+    pb_ratio: float | None = None
+    roe: float | None = None
+    gross_margin: float | None = None
+    net_margin: float | None = None
+    debt_to_asset: float | None = None
+    revenue_growth: float | None = None
+    net_profit_growth: float | None = None
+    source_note: str | None = None
+
+
 class SummaryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

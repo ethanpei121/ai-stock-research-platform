@@ -9,7 +9,17 @@ from typing import Any
 from openai import OpenAI
 
 from app.core.config import get_settings
-from app.schemas.market import NewsItem, SummaryContent, SummaryDataPoints, SummaryMeta, SummaryResponse
+from app.core.errors import APIError
+from app.schemas.market import (
+    AnnouncementItem,
+    FundamentalsResponse,
+    NewsItem,
+    SummaryContent,
+    SummaryDataPoints,
+    SummaryMeta,
+    SummaryResponse,
+)
+from app.services.company_data import get_announcements, get_fundamentals
 from app.services.market_data import get_news, get_quote, normalize_symbol
 
 
@@ -24,6 +34,9 @@ POSITIVE_KEYWORDS = (
     "buyback",
     "profit",
     "partnership",
+    "增持",
+    "签约",
+    "中标",
 )
 NEGATIVE_KEYWORDS = (
     "miss",
@@ -34,7 +47,12 @@ NEGATIVE_KEYWORDS = (
     "drop",
     "investigation",
     "risk",
+    "诉讼",
+    "减持",
+    "亏损",
 )
+ANNOUNCEMENT_POSITIVE_KEYWORDS = ("年报", "一季报", "中标", "回购", "分红", "增持", "股权激励")
+ANNOUNCEMENT_NEGATIVE_KEYWORDS = ("风险", "减持", "问询", "处罚", "诉讼", "终止", "延期", "澄清")
 
 
 @dataclass
@@ -48,9 +66,22 @@ def generate_summary(symbol: str, generated_at: datetime | None = None) -> Summa
     quote = get_quote(normalized_symbol)
     news = get_news(normalized_symbol, limit=5)
 
-    summary_result = _generate_llm_summary(normalized_symbol, quote, news.items)
+    fundamentals: FundamentalsResponse | None = None
+    try:
+        fundamentals = get_fundamentals(normalized_symbol)
+    except APIError as exc:
+        logger.info("Fundamentals unavailable for summary %s: %s", normalized_symbol, exc.code)
+
+    announcements: list[AnnouncementItem] = []
+    try:
+        announcements_response = get_announcements(normalized_symbol, limit=3)
+        announcements = announcements_response.items
+    except APIError as exc:
+        logger.info("Announcements unavailable for summary %s: %s", normalized_symbol, exc.code)
+
+    summary_result = _generate_llm_summary(normalized_symbol, quote, news.items, fundamentals, announcements)
     if summary_result is None:
-        summary_result = _generate_rule_summary(normalized_symbol, quote, news.items)
+        summary_result = _generate_rule_summary(normalized_symbol, quote, news.items, fundamentals, announcements)
 
     return SummaryResponse(
         symbol=normalized_symbol,
@@ -65,7 +96,13 @@ def generate_summary(symbol: str, generated_at: datetime | None = None) -> Summa
     )
 
 
-def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryGenerationResult | None:
+def _generate_llm_summary(
+    symbol: str,
+    quote: Any,
+    news_items: list[NewsItem],
+    fundamentals: FundamentalsResponse | None,
+    announcements: list[AnnouncementItem],
+) -> SummaryGenerationResult | None:
     settings = get_settings()
     if not settings.llm_api_key:
         return None
@@ -78,6 +115,22 @@ def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -
             "change_percent": quote.change_percent,
             "currency": quote.currency,
             "market_time": quote.market_time.isoformat(),
+            "provider": quote.provider,
+        },
+        "fundamentals": None
+        if fundamentals is None
+        else {
+            "providers": fundamentals.providers,
+            "industry": fundamentals.industry,
+            "market_cap": fundamentals.market_cap,
+            "pe_ratio": fundamentals.pe_ratio,
+            "pb_ratio": fundamentals.pb_ratio,
+            "roe": fundamentals.roe,
+            "gross_margin": fundamentals.gross_margin,
+            "net_margin": fundamentals.net_margin,
+            "debt_to_asset": fundamentals.debt_to_asset,
+            "revenue_growth": fundamentals.revenue_growth,
+            "net_profit_growth": fundamentals.net_profit_growth,
         },
         "news": [
             {
@@ -87,6 +140,16 @@ def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -
                 "url": item.url,
             }
             for item in news_items
+        ],
+        "announcements": [
+            {
+                "title": item.title,
+                "source": item.source,
+                "published_at": item.published_at.isoformat(),
+                "url": item.url,
+                "category": item.category,
+            }
+            for item in announcements
         ],
     }
 
@@ -104,7 +167,7 @@ def _generate_llm_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -
                     "role": "system",
                     "content": (
                         "你是一名谨慎的中文股票研究助理。"
-                        "请仅输出一个 JSON 对象，字段必须是 bullish、bearish、conclusion。"
+                        "请结合行情、新闻、基本面和公告，仅输出一个 JSON 对象，字段必须是 bullish、bearish、conclusion。"
                         "bullish 和 bearish 必须是中文字符串数组，每个数组 2 到 4 条；"
                         "conclusion 必须是 1 段中文结论。不要输出 markdown 解释。"
                     ),
@@ -159,7 +222,13 @@ def _extract_json_object(content: str) -> dict[str, Any]:
     raise ValueError("LLM response is not valid JSON.")
 
 
-def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) -> SummaryGenerationResult:
+def _generate_rule_summary(
+    symbol: str,
+    quote: Any,
+    news_items: list[NewsItem],
+    fundamentals: FundamentalsResponse | None,
+    announcements: list[AnnouncementItem],
+) -> SummaryGenerationResult:
     positive_hits = 0
     negative_hits = 0
     uses_mock_news = any(item.source.startswith("mock") for item in news_items)
@@ -183,6 +252,38 @@ def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) 
 
     bullish.append(f"已聚合 {len(news_items)} 条相关新闻，可快速查看近期市场关注点。")
 
+    if fundamentals is not None:
+        if (fundamentals.revenue_growth or 0) > 0:
+            bullish.append(f"基本面显示营收同比增速约 {fundamentals.revenue_growth:.2f}%，说明主营仍在增长。")
+        elif fundamentals.revenue_growth is not None:
+            bearish.append(f"基本面显示营收同比增速约 {fundamentals.revenue_growth:.2f}%，增长承压需要继续核实。")
+
+        if (fundamentals.net_profit_growth or 0) > 0:
+            bullish.append(f"归母净利润同比增速约 {fundamentals.net_profit_growth:.2f}%，利润端表现相对积极。")
+        elif fundamentals.net_profit_growth is not None:
+            bearish.append(f"归母净利润同比增速约 {fundamentals.net_profit_growth:.2f}%，盈利修复节奏仍需观察。")
+
+        if (fundamentals.roe or 0) >= 10:
+            bullish.append(f"ROE 约为 {fundamentals.roe:.2f}%，资本回报率处于相对可接受区间。")
+        elif fundamentals.roe is not None:
+            bearish.append(f"ROE 约为 {fundamentals.roe:.2f}%，资本回报效率并不算强。")
+    else:
+        bearish.append("基本面数据当前不可用，无法进一步验证估值与盈利质量。")
+
+    positive_announcement_hits = 0
+    negative_announcement_hits = 0
+    for item in announcements:
+        title = item.title.lower()
+        positive_announcement_hits += sum(keyword in title for keyword in ANNOUNCEMENT_POSITIVE_KEYWORDS)
+        negative_announcement_hits += sum(keyword in title for keyword in ANNOUNCEMENT_NEGATIVE_KEYWORDS)
+
+    if announcements:
+        bullish.append(f"最近抓取到 {len(announcements)} 条公告，可补充验证新闻之外的正式披露信息。")
+    if positive_announcement_hits > 0:
+        bullish.append(f"公告标题中出现 {positive_announcement_hits} 个偏积极关键词，可关注正式披露的经营或资本运作进展。")
+    if negative_announcement_hits > 0:
+        bearish.append(f"公告标题中出现 {negative_announcement_hits} 个偏风险关键词，建议重点阅读原文公告。")
+
     if positive_hits > 0:
         bullish.append(f"新闻标题中出现 {positive_hits} 个偏利好关键词，短线情绪相对偏积极。")
     else:
@@ -201,9 +302,11 @@ def _generate_rule_summary(symbol: str, quote: Any, news_items: list[NewsItem]) 
     conclusion = _build_conclusion(
         symbol=symbol,
         change_percent=quote.change_percent,
-        positive_hits=positive_hits,
-        negative_hits=negative_hits,
+        positive_hits=positive_hits + positive_announcement_hits,
+        negative_hits=negative_hits + negative_announcement_hits,
         uses_mock_news=uses_mock_news,
+        has_fundamentals=fundamentals is not None,
+        has_announcements=bool(announcements),
     )
 
     return SummaryGenerationResult(
@@ -227,6 +330,8 @@ def _build_conclusion(
     positive_hits: int,
     negative_hits: int,
     uses_mock_news: bool,
+    has_fundamentals: bool,
+    has_announcements: bool,
 ) -> str:
     if change_percent > 1 and positive_hits >= negative_hits:
         stance = "短线偏强"
@@ -241,9 +346,15 @@ def _build_conclusion(
             "更适合作为演示环境的研究入口，不建议直接据此做高风险交易决策。"
         )
 
+    if has_fundamentals and has_announcements:
+        return (
+            f"{symbol} 当前判断为{stance}。除行情和新闻外，当前总结还参考了基本面字段与正式公告，"
+            "更适合做一轮较完整的投研初筛；若用于真实投资，仍建议继续核对财报原文与估值假设。"
+        )
+
     return (
         f"{symbol} 当前判断为{stance}。可以先结合价格变化与最近新闻做一轮快速筛选，"
-        "若要用于真实投资，请继续补充财报、估值和更高质量新闻源后再做决定。"
+        "若要用于真实投资，请继续补充财报、公告原文和更高质量新闻源后再做决定。"
     )
 
 
@@ -263,4 +374,4 @@ def _coerce_points(value: Any, *, minimum: int) -> list[str]:
 def _coerce_conclusion(value: Any) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
-    return "当前信息可用于快速演示和初筛，但正式投资前仍需补充更多基本面与时效性更高的数据。"
+    return "当前信息可用于快速演示和初筛，但正式投资前仍需补充更多基本面、公告与时效性更高的数据。"
