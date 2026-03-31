@@ -20,3 +20,11 @@ def test_normalize_symbol_supports_a_share_shenzhen_code() -> None:
 
 def test_normalize_symbol_supports_a_share_shanghai_code() -> None:
     assert normalize_symbol("600519") == "600519.SS"
+
+
+def test_normalize_symbol_supports_hk_with_suffix() -> None:
+    assert normalize_symbol("00700.HK") == "0700.HK"
+
+
+def test_normalize_symbol_supports_hk_without_suffix() -> None:
+    assert normalize_symbol("0700") == "0700.HK"

@@ -64,7 +64,7 @@ def normalize_symbol(symbol: str) -> str:
         raise APIError(
             status_code=400,
             code="INVALID_SYMBOL",
-            message="股票代码格式无效，请输入合法代码，例如 AAPL、300750.SZ、600519.SS。",
+            message="股票代码格式无效，请输入合法代码，例如 AAPL、300750.SZ、600519.SS、0700.HK。",
             details={"symbol": normalized},
         )
     return normalized
@@ -453,9 +453,34 @@ def _safe_fast_info(ticker: yf.Ticker) -> dict[str, Any]:
 
 
 def _normalize_regional_symbol(symbol: str) -> str:
-    if not symbol.isdigit() or len(symbol) != 6:
+    if symbol.endswith(".HK"):
+        base = symbol[:-3]
+        if base.isdigit():
+            normalized = base.lstrip("0") or "0"
+            if len(normalized) <= 4:
+                normalized = normalized.zfill(4)
+            return f"{normalized}.HK"
         return symbol
 
+    if not symbol.isdigit():
+        return symbol
+
+    if len(symbol) == 6:
+        if symbol.startswith(("0", "3")):
+            return f"{symbol}.SZ"
+        if symbol.startswith(("5", "6", "9")):
+            return f"{symbol}.SS"
+        if symbol.startswith(("4", "8")):
+            return f"{symbol}.BJ"
+        return symbol
+
+    if len(symbol) in (4, 5):
+        normalized = symbol.lstrip("0") or "0"
+        if len(normalized) <= 4:
+            normalized = normalized.zfill(4)
+        return f"{normalized}.HK"
+
+    return symbol
     if symbol.startswith(("0", "3")):
         return f"{symbol}.SZ"
     if symbol.startswith(("5", "6", "9")):
@@ -751,6 +776,8 @@ def _build_mock_news(symbol: str) -> list[NewsItem]:
             )
         )
     return items
+
+
 
 
 
