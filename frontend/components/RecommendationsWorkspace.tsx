@@ -106,10 +106,10 @@ function scoreLabel(row: RecommendationRow) {
 
 function StatCell({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-900/5">
+    <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-900/5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-3 font-mono text-2xl font-semibold text-slate-900">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-slate-500">{note}</p>
+      <p className="mt-2 font-mono text-xl font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>
     </div>
   );
 }
@@ -148,8 +148,8 @@ export function RecommendationsWorkspace({
   const coverage = getCoverage(rows);
 
   return (
-    <section className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-4">
+    <section className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCell label="Universe" value={String(rows.length)} note="当前筛选后的推荐标的数量" />
         <StatCell label="US Coverage" value={String(coverage.usStocks)} note="当前列表里的美股与美股 ADR" />
         <StatCell label="A-share Coverage" value={String(coverage.aShares)} note="当前列表里的 A 股标的" />
@@ -160,15 +160,15 @@ export function RecommendationsWorkspace({
         />
       </div>
 
-      <div className="overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-slate-900/5">
-        <div className="flex flex-col gap-5 border-b border-slate-200/80 px-5 py-5 lg:flex-row lg:items-start lg:justify-between lg:px-6">
-          <div className="space-y-3">
+      <div className="overflow-hidden rounded-[24px] bg-white shadow-sm ring-1 ring-slate-900/5">
+        <div className="flex flex-col gap-4 border-b border-slate-200/80 px-5 py-4 lg:flex-row lg:items-start lg:justify-between lg:px-6">
+          <div className="space-y-2">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-600">Market Dashboard</p>
               <h2 className="mt-2 text-xl font-bold text-slate-900">推荐股票池</h2>
             </div>
-            <p className="max-w-3xl text-sm leading-7 text-slate-500">
-              默认展示固定观察池，并同步回补每只股票的市场快照。点击任意股票或使用顶部搜索框，即可在右侧打开个股 AI 分析。点击“刷新实时推荐”后，结果会按后端实时数据重新排序。
+            <p className="max-w-3xl text-sm leading-6 text-slate-500">
+              默认展示固定观察池并回填行情快照。点击任意股票或使用顶部搜索框即可打开右侧分析。
             </p>
             <div className="flex flex-wrap gap-2">
               {activeSymbol ? (
@@ -188,7 +188,7 @@ export function RecommendationsWorkspace({
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-3 lg:items-end">
+          <div className="flex flex-col items-start gap-2 lg:items-end">
             {data ? (
               <div className="grid gap-1 text-sm text-slate-500 lg:text-right">
                 <span>模式: {data.mode === "live" ? "实时推荐" : "固定观察池"}</span>
@@ -198,7 +198,7 @@ export function RecommendationsWorkspace({
             ) : null}
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-progress disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-progress disabled:opacity-60"
               disabled={isRefreshing}
               onClick={onRefresh}
             >
@@ -208,12 +208,12 @@ export function RecommendationsWorkspace({
           </div>
         </div>
 
-        <div className="grid gap-4 border-b border-slate-200/80 bg-slate-50/70 px-5 py-4 md:grid-cols-[220px_220px_minmax(0,1fr)] md:items-end lg:px-6">
+        <div className="grid gap-4 border-b border-slate-200/80 bg-slate-50/70 px-5 py-3 md:grid-cols-[200px_200px_minmax(0,1fr)] md:items-end lg:px-6">
           <label className="grid gap-2 text-sm font-medium text-slate-700">
             行业
             <select
               value={selectedCategory}
-              className="rounded-xl border-0 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm ring-1 ring-slate-900/5 outline-none transition focus:ring-2 focus:ring-indigo-100"
+              className="rounded-xl border-0 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-slate-900/5 outline-none transition focus:ring-2 focus:ring-indigo-100"
               onChange={(event) => onCategoryChange(event.target.value)}
             >
               {categories.map((category) => (
@@ -228,7 +228,7 @@ export function RecommendationsWorkspace({
             风格
             <select
               value={selectedStyle}
-              className="rounded-xl border-0 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm ring-1 ring-slate-900/5 outline-none transition focus:ring-2 focus:ring-indigo-100"
+              className="rounded-xl border-0 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm ring-1 ring-slate-900/5 outline-none transition focus:ring-2 focus:ring-indigo-100"
               onChange={(event) => onStyleChange(event.target.value)}
             >
               {styleFilters.map((style) => (
@@ -240,7 +240,7 @@ export function RecommendationsWorkspace({
           </label>
 
           {data ? (
-            <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 shadow-sm ring-1 ring-slate-900/5">
+            <div className="rounded-2xl bg-white px-4 py-2.5 text-sm text-slate-600 shadow-sm ring-1 ring-slate-900/5">
               <span className="font-medium text-slate-900">推荐方法:</span> {data.methodology}
             </div>
           ) : null}
@@ -248,9 +248,9 @@ export function RecommendationsWorkspace({
 
         {refreshError ? <div className="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm text-rose-600 lg:px-6">{refreshError}</div> : null}
 
-        {section.status === "loading" ? <div className="px-5 py-10 text-sm text-slate-500 lg:px-6">推荐股票池正在加载。</div> : null}
+        {section.status === "loading" ? <div className="px-5 py-8 text-sm text-slate-500 lg:px-6">推荐股票池正在加载。</div> : null}
 
-        {section.status === "error" ? <div className="px-5 py-10 text-sm text-rose-600 lg:px-6">{section.error}</div> : null}
+        {section.status === "error" ? <div className="px-5 py-8 text-sm text-rose-600 lg:px-6">{section.error}</div> : null}
 
         {data ? (
           rows.length > 0 ? (
@@ -387,12 +387,12 @@ export function RecommendationsWorkspace({
                 })}
               </div>
 
-              <div className="border-t border-slate-200/80 bg-slate-50/80 px-5 py-4 text-xs text-slate-500 lg:px-6">
+              <div className="border-t border-slate-200/80 bg-slate-50/80 px-5 py-3 text-xs text-slate-500 lg:px-6">
                 数据来源: {data.data_sources.join(" / ") || "前端固定观察池"}
               </div>
             </>
           ) : (
-            <div className="px-5 py-10 text-sm text-slate-500 lg:px-6">当前筛选条件下没有可展示的股票。</div>
+            <div className="px-5 py-8 text-sm text-slate-500 lg:px-6">当前筛选条件下没有可展示的股票。</div>
           )
         ) : null}
       </div>

@@ -34,12 +34,12 @@ function InfoCard({
   description: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-900/5">
       <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
         <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">{icon}</span>
         {title}
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-500">{description}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
     </div>
   );
 }
@@ -173,23 +173,23 @@ export function HomePageClient() {
   };
 
   return (
-    <main className="space-y-6">
+    <main className="space-y-4">
       <div
-        className={`grid items-start gap-6 transition-[grid-template-columns] duration-300 ease-out ${
-          isPanelOpen ? "xl:grid-cols-[minmax(0,1.5fr)_minmax(380px,1fr)]" : "xl:grid-cols-1"
+        className={`grid items-start gap-5 transition-[grid-template-columns] duration-300 ease-out ${
+          isPanelOpen ? "xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]" : "xl:grid-cols-1"
         }`}
       >
-        <div className={`space-y-6 transition-[max-width] duration-300 ${isPanelOpen ? "" : "mx-auto w-full max-w-6xl"}`}>
-          <section className={`grid gap-4 ${isPanelOpen ? "2xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]" : "xl:grid-cols-[minmax(0,1.45fr)_360px]"}`}>
-            <div className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-900/5 sm:p-7">
+        <div className={`space-y-4 transition-[max-width] duration-300 ${isPanelOpen ? "" : "mx-auto w-full max-w-6xl"}`}>
+          <section className={`grid gap-3 ${isPanelOpen ? "2xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]" : "xl:grid-cols-[minmax(0,1.6fr)_320px]"}`}>
+            <div className="rounded-[24px] bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-600">Market Overview</p>
-              <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
-                推荐池是主视图，分析面板是从视图，左侧始终保持可浏览和可操作。
+              <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-900">
+                推荐池为主视图，右侧面板为个股深度分析。
               </h2>
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-500">
-                整个页面现在更像现代 Fintech 工作台：左侧负责市场发现、筛选与快速决策，右侧负责单票深度分析。即使 AI 正在右侧生成投研简报，你仍然可以继续在左侧浏览其他股票并即时切换分析对象。
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                左侧用于发现和筛选，右侧用于总结与判断。分析过程中左侧仍保持可浏览与可点击。
               </p>
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">
                   默认首页: 推荐观察池
                 </span>
@@ -198,32 +198,32 @@ export function HomePageClient() {
                 </span>
                 {isPanelOpen ? (
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
-                    当前正在查看 {activeSymbol}
+                    当前查看 {activeSymbol}
                   </span>
                 ) : null}
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <InfoCard
                 icon={<PanelRightOpen className="h-4 w-4" />}
                 title="主从分屏"
-                description="选中股票后，页面会平滑切换为左右分屏，右侧加载不会阻塞左侧浏览与点击。"
+                description="选中股票后自动分屏，右侧加载不阻塞左侧浏览。"
               />
               <InfoCard
                 icon={<Activity className="h-4 w-4" />}
                 title="非阻塞加载"
-                description="右侧分析采用步骤式加载提示，行情、新闻和总结会按进度逐步填充，而不是整块骨架屏。"
+                description="行情、新闻、摘要分步填充，页面始终可操作。"
               />
               <InfoCard
                 icon={<Database className="h-4 w-4" />}
                 title="Proxy & Update"
-                description={`固定观察池时间戳 ${formatDateTime(DEFAULT_RECOMMENDATIONS.updated_at)}，点击刷新按钮时会切到实时推荐模式。`}
+                description={`观察池时间 ${formatDateTime(DEFAULT_RECOMMENDATIONS.updated_at)}，点击按钮可切到实时推荐。`}
               />
               <InfoCard
                 icon={<TrendingUp className="h-4 w-4" />}
                 title="金融终端风格"
-                description="整体改为更现代的 SaaS 金融终端视觉，使用 ring、阴影、圆角和 Indigo 点缀增强层级感。"
+                description="保持轻量网格与精简信息层级，避免大段空白。"
               />
             </div>
           </section>
