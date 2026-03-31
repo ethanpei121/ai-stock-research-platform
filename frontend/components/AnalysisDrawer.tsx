@@ -49,6 +49,64 @@ function getStepState<T>(section: AsyncSection<T>): StepState {
   return "pending";
 }
 
+function getLatestNewsTimestamp(news: NewsResponse): string | null {
+  if (!news.items.length) {
+    return null;
+  }
+
+  let latest = new Date(0);
+  for (const item of news.items) {
+    const parsed = new Date(item.published_at);
+    if (!Number.isNaN(parsed.getTime()) && parsed > latest) {
+      latest = parsed;
+    }
+  }
+
+  if (latest.getTime() === 0) {
+    return null;
+  }
+  return latest.toISOString();
+}
+
+function buildLocalSummary(symbol: string, quote: Quote, news: NewsResponse): SummaryResponse {
+  const bullish: string[] = [];
+  const bearish: string[] = [];
+
+  if (quote.change_percent >= 0) {
+    bullish.push(`最新报价为 ${quote.price.toFixed(2)} ${quote.currency}，日内上涨 ${Math.abs(quote.change_percent).toFixed(2)}%。`);
+  } else {
+    bearish.push(`最新报价为 ${quote.price.toFixed(2)} ${quote.currency}，日内下跌 ${Math.abs(quote.change_percent).toFixed(2)}%。`);
+  }
+
+  bullish.push(`已聚合 ${news.count} 条相关新闻，摘要基于本轮最新抓取结果生成。`);
+  bearish.push("当前摘要为快速回退版本，AI 总结正在后台重试。", "免费数据源可能存在分钟级延迟。" );
+
+  return {
+    symbol,
+    generated_at: new Date().toISOString(),
+    summary: {
+      bullish,
+      bearish,
+      conclusion: "本次摘要为快速回退版本，已最大限度保证页面可用性；AI 总结完成后会自动更新。",
+    },
+    data_points: {
+      price: quote.price,
+      change_percent: quote.change_percent,
+      news_count: news.count,
+    },
+    meta: {
+      provider: "template",
+      model: null,
+      is_fallback: true,
+      force_refresh_used: true,
+      quote_provider: quote.provider,
+      quote_market_time: quote.market_time,
+      latest_news_time: getLatestNewsTimestamp(news),
+      news_providers: news.providers,
+    },
+  };
+}
+
 function AnalysisLoadingState({
   quoteSection,
   newsSection,
@@ -157,6 +215,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
     }
 
     let cancelled = false;
+    let retried = false;
     const normalized = symbol.trim().toUpperCase();
 
     const run = async () => {
@@ -203,21 +262,41 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
         return;
       }
 
-      try {
-        const summary = await getSummary(normalized, {
-          fresh: true,
-          quote: resolvedQuote,
-          news: resolvedNews,
-          includeSupplemental: false,
-        });
-        if (!cancelled) {
-          setSummarySection({ status: "success", data: summary, error: null });
+      const fallbackSummary = () => {
+        const summary = buildLocalSummary(normalized, resolvedQuote!, resolvedNews!);
+        setSummarySection({ status: "success", data: summary, error: null });
+      };
+
+      const attemptAi = async () => {
+        try {
+          const summary = await getSummary(normalized, {
+            fresh: true,
+            quote: resolvedQuote,
+            news: resolvedNews,
+            includeSupplemental: false,
+          });
+          if (!cancelled) {
+            setSummarySection({ status: "success", data: summary, error: null });
+          }
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+          if (!retried) {
+            retried = true;
+            fallbackSummary();
+            setTimeout(() => {
+              if (!cancelled) {
+                void attemptAi();
+              }
+            }, 2000);
+            return;
+          }
+          fallbackSummary();
         }
-      } catch (error) {
-        if (!cancelled) {
-          setSummarySection({ status: "error", data: null, error: toErrorMessage(error) });
-        }
-      }
+      };
+
+      void attemptAi();
     };
 
     void run();
