@@ -173,13 +173,17 @@ export function HomePageClient() {
   };
 
   return (
-    <main className="space-y-4">
+    <main className="space-y-3">
       <div
-        className={`grid items-start gap-5 transition-[grid-template-columns] duration-300 ease-out ${
+        className={`grid items-start gap-5 transition-[grid-template-columns] duration-300 ease-out xl:h-[calc(100vh-7.5rem)] xl:overflow-hidden ${
           isPanelOpen ? "xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]" : "xl:grid-cols-1"
         }`}
       >
-        <div className={`space-y-4 transition-[max-width] duration-300 ${isPanelOpen ? "" : "mx-auto w-full max-w-6xl"}`}>
+        <div
+          className={`space-y-4 transition-[max-width] duration-300 xl:h-full xl:overflow-y-auto xl:pr-2 ${
+            isPanelOpen ? "" : "mx-auto w-full max-w-6xl"
+          }`}
+        >
           <section className={`grid gap-3 ${isPanelOpen ? "2xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.9fr)]" : "xl:grid-cols-[minmax(0,1.6fr)_320px]"}`}>
             <div className="rounded-[24px] bg-white p-5 shadow-sm ring-1 ring-slate-900/5 sm:p-6">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-600">Market Overview</p>
