@@ -39,6 +39,9 @@ ALPHA_VANTAGE_PROVIDER = "Alpha Vantage"
 FINNHUB_PROVIDER = "Finnhub"
 GOOGLE_NEWS_PROVIDER = "Google News RSS"
 MOCK_PROVIDER = "mock:fallback"
+DEFAULT_NEWS_FETCH_TARGET = 8
+ALPHA_VANTAGE_NEWS_TIMEOUT_SECONDS = 8.0
+GOOGLE_NEWS_TIMEOUT_SECONDS = 8.0
 
 
 class ProviderUnavailableError(Exception):
@@ -144,15 +147,13 @@ def get_quote(symbol: str, *, force_refresh: bool = False) -> QuoteResponse:
 def get_news(symbol: str, limit: int = 5, *, force_refresh: bool = False) -> NewsResponse:
     normalized_symbol = normalize_symbol(symbol)
     validated_limit = validate_news_limit(limit)
+    target_count = min(20, max(validated_limit, DEFAULT_NEWS_FETCH_TARGET))
+    cached_items = NEWS_CACHE.get(normalized_symbol)
 
-    if force_refresh:
-        cached_items = _fetch_news_items(normalized_symbol)
-        NEWS_CACHE.set(normalized_symbol, cached_items)
-    else:
-        cached_items = NEWS_CACHE.get(normalized_symbol)
-        if cached_items is None:
-            cached_items = _fetch_news_items(normalized_symbol)
-            NEWS_CACHE.set(normalized_symbol, cached_items)
+    should_refresh = force_refresh or cached_items is None or len(cached_items) < validated_limit
+    if should_refresh:
+        refreshed_items = _fetch_news_items(normalized_symbol, target_count=target_count)
+        cached_items = NEWS_CACHE.set(normalized_symbol, refreshed_items)
 
     items = cached_items[:validated_limit]
     return NewsResponse(
@@ -300,23 +301,40 @@ def _fetch_quote_from_finnhub(symbol: str, api_key: str) -> QuoteResponse:
     )
 
 
-def _fetch_news_items(symbol: str) -> list[NewsItem]:
+def _fetch_news_items(symbol: str, *, target_count: int = 20) -> list[NewsItem]:
+    desired_count = min(20, max(1, target_count))
     aggregated_items: list[NewsItem] = []
 
-    if is_a_share_symbol(symbol):
-        aggregated_items.extend(fetch_eastmoney_news_items(symbol))
+    def extend_and_trim(items: list[NewsItem]) -> list[NewsItem]:
+        nonlocal aggregated_items
+        if items:
+            aggregated_items.extend(items)
+        deduplicated_items = _merge_news_items(aggregated_items)
+        if deduplicated_items:
+            aggregated_items = deduplicated_items[:20]
+        return aggregated_items
 
-    aggregated_items.extend(_fetch_yfinance_news_items(symbol))
+    if is_a_share_symbol(symbol):
+        current_items = extend_and_trim(fetch_eastmoney_news_items(symbol))
+        if len(current_items) >= desired_count:
+            return current_items[:20]
+
+    current_items = extend_and_trim(_fetch_yfinance_news_items(symbol))
+    if len(current_items) >= desired_count:
+        return current_items[:20]
+
+    current_items = extend_and_trim(_fetch_google_news_items(symbol))
+    if len(current_items) >= desired_count:
+        return current_items[:20]
 
     settings = get_settings()
     if settings.alpha_vantage_api_key:
-        aggregated_items.extend(_fetch_alpha_vantage_news_items(symbol, settings.alpha_vantage_api_key))
+        current_items = extend_and_trim(_fetch_alpha_vantage_news_items(symbol, settings.alpha_vantage_api_key))
+        if len(current_items) >= desired_count:
+            return current_items[:20]
 
-    aggregated_items.extend(_fetch_google_news_items(symbol))
-    deduplicated_items = _merge_news_items(aggregated_items)
-
-    if deduplicated_items:
-        return deduplicated_items[:20]
+    if aggregated_items:
+        return aggregated_items[:20]
 
     return _build_mock_news(symbol)
 
@@ -349,7 +367,11 @@ def _fetch_alpha_vantage_news_items(symbol: str, api_key: str) -> list[NewsItem]
         return []
 
     try:
-        with httpx.Client(timeout=18.0, headers=DEFAULT_HEADERS, follow_redirects=True) as client:
+        with httpx.Client(
+            timeout=ALPHA_VANTAGE_NEWS_TIMEOUT_SECONDS,
+            headers=DEFAULT_HEADERS,
+            follow_redirects=True,
+        ) as client:
             response = client.get(
                 "https://www.alphavantage.co/query",
                 params={
@@ -403,7 +425,7 @@ def _fetch_google_news_items(symbol: str) -> list[NewsItem]:
     query = _build_google_news_query(symbol)
 
     try:
-        with httpx.Client(timeout=18.0, headers=DEFAULT_HEADERS, follow_redirects=True) as client:
+        with httpx.Client(timeout=GOOGLE_NEWS_TIMEOUT_SECONDS, headers=DEFAULT_HEADERS, follow_redirects=True) as client:
             response = client.get(
                 "https://news.google.com/rss/search",
                 params={

@@ -55,9 +55,11 @@ function getLatestNewsTimestamp(news: NewsResponse): string | null {
   return latest.toISOString();
 }
 
-function buildLocalSummary(symbol: string, quote: Quote, news: NewsResponse): SummaryResponse {
+function buildLocalSummary(symbol: string, quote: Quote, news: NewsResponse | null): SummaryResponse {
   const bullish: string[] = [];
   const bearish: string[] = [];
+  const newsCount = news?.count ?? 0;
+  const newsProviders = news?.providers ?? [];
 
   if (quote.change_percent >= 0) {
     bullish.push(`最新报价 ${quote.price.toFixed(2)} ${quote.currency}，日内上涨 ${Math.abs(quote.change_percent).toFixed(2)}%。`);
@@ -65,14 +67,19 @@ function buildLocalSummary(symbol: string, quote: Quote, news: NewsResponse): Su
     bearish.push(`最新报价 ${quote.price.toFixed(2)} ${quote.currency}，日内下跌 ${Math.abs(quote.change_percent).toFixed(2)}%。`);
   }
 
-  bullish.push(`已聚合 ${news.count} 条相关新闻。`);
+  if (news && news.count > 0) {
+    bullish.push(`已聚合 ${news.count} 条相关新闻。`);
+  } else {
+    bearish.push("本轮新闻源未及时返回，当前简报先基于行情生成。");
+  }
+
   bearish.push("当前为快速回退版本，AI 总结正在后台重试。");
 
   return {
     symbol,
     generated_at: new Date().toISOString(),
     summary: { bullish, bearish, conclusion: "快速回退摘要，AI 总结完成后会自动更新。" },
-    data_points: { price: quote.price, change_percent: quote.change_percent, news_count: news.count },
+    data_points: { price: quote.price, change_percent: quote.change_percent, news_count: newsCount },
     meta: {
       provider: "template",
       model: null,
@@ -80,8 +87,8 @@ function buildLocalSummary(symbol: string, quote: Quote, news: NewsResponse): Su
       force_refresh_used: true,
       quote_provider: quote.provider,
       quote_market_time: quote.market_time,
-      latest_news_time: getLatestNewsTimestamp(news),
-      news_providers: news.providers,
+      latest_news_time: news ? getLatestNewsTimestamp(news) : null,
+      news_providers: newsProviders,
     },
   };
 }
@@ -184,6 +191,11 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
       }
 
       if (!resolvedQuote || !resolvedNews) {
+        if (resolvedQuote) {
+          const localSummary = buildLocalSummary(normalized, resolvedQuote, null);
+          setSummarySection({ status: "success", data: localSummary, error: null });
+          return;
+        }
         setSummarySection({
           status: "error",
           data: null,
