@@ -96,7 +96,6 @@ def get_quote(symbol: str, *, force_refresh: bool = False) -> QuoteResponse:
     fetchers: list[tuple[str, Any]] = []
     if is_a_share_symbol(normalized_symbol):
         fetchers.append((AKSHARE_QUOTE_PROVIDER, lambda: fetch_quote_from_akshare(normalized_symbol)))
-
     fetchers.append((YAHOO_FINANCE_PROVIDER, lambda: _fetch_quote_from_yfinance(normalized_symbol)))
 
     if settings.alpha_vantage_api_key:
@@ -166,10 +165,13 @@ def get_news(symbol: str, limit: int = 5, *, force_refresh: bool = False) -> New
 
 def _fetch_quote_from_yfinance(symbol: str) -> QuoteResponse:
     ticker = yf.Ticker(symbol)
+    if is_a_share_symbol(symbol):
+        return _fetch_quote_from_yfinance_daily(ticker, symbol)
+
     fast_info = _safe_fast_info(ticker)
 
     try:
-        intraday_history = ticker.history(period="1d", interval="1m", auto_adjust=False)
+        intraday_history = ticker.history(period="1d", interval="1m", auto_adjust=False, timeout=8)
     except Exception as exc:
         logger.warning("Intraday quote fetch failed for %s: %s", symbol, exc)
         intraday_history = None
@@ -177,7 +179,7 @@ def _fetch_quote_from_yfinance(symbol: str) -> QuoteResponse:
     close_point = _extract_latest_close(intraday_history)
     if close_point is None:
         try:
-            daily_history = ticker.history(period="5d", interval="1d", auto_adjust=False)
+            daily_history = ticker.history(period="5d", interval="1d", auto_adjust=False, timeout=8)
         except Exception as exc:
             raise ProviderUnavailableError("yfinance history request failed") from exc
 
@@ -202,6 +204,33 @@ def _fetch_quote_from_yfinance(symbol: str) -> QuoteResponse:
         change=change,
         change_percent=change_percent,
         currency=currency,
+        market_time=market_time,
+        provider=YAHOO_FINANCE_PROVIDER,
+    )
+
+
+def _fetch_quote_from_yfinance_daily(ticker: yf.Ticker, symbol: str) -> QuoteResponse:
+    try:
+        daily_history = ticker.history(period="5d", interval="1d", auto_adjust=False, timeout=8)
+    except Exception as exc:
+        raise ProviderUnavailableError("yfinance A-share history request failed") from exc
+
+    close_point = _extract_latest_close(daily_history)
+    if close_point is None:
+        raise ProviderNotFoundError("yfinance returned empty A-share quote history")
+
+    price = close_point["price"]
+    market_time = close_point["market_time"]
+    previous_close = _extract_previous_close_from_history(daily_history) or price
+    change = round(price - previous_close, 4)
+    change_percent = round((change / previous_close) * 100, 4) if previous_close else 0.0
+
+    return QuoteResponse(
+        symbol=symbol,
+        price=round(price, 4),
+        change=change,
+        change_percent=change_percent,
+        currency=_infer_currency(symbol),
         market_time=market_time,
         provider=YAHOO_FINANCE_PROVIDER,
     )
@@ -542,6 +571,23 @@ def _extract_latest_close(history_frame: Any) -> dict[str, Any] | None:
         "price": price,
         "market_time": _coerce_datetime(closes.index[-1]),
     }
+
+
+def _extract_previous_close_from_history(history_frame: Any) -> float | None:
+    if history_frame is None or getattr(history_frame, "empty", True):
+        return None
+    if "Close" not in history_frame:
+        return None
+
+    try:
+        closes = history_frame["Close"].dropna()
+    except Exception:
+        return None
+
+    if len(closes) < 2:
+        return None
+
+    return _safe_float(closes.iloc[-2])
 
 
 def _resolve_previous_close(*, fast_info: dict[str, Any], current_price: float, symbol: str) -> float:

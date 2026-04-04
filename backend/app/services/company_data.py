@@ -27,6 +27,7 @@ except Exception:  # pragma: no cover - optional dependency at runtime
 logger = logging.getLogger(__name__)
 
 AKSHARE_QUOTE_PROVIDER = "AkShare / Eastmoney Quote"
+AKSHARE_XUEQIU_QUOTE_PROVIDER = "AkShare / Xueqiu Quote"
 AKSHARE_NEWS_PROVIDER = "AkShare / Eastmoney News"
 AKSHARE_FUNDAMENTALS_PROVIDER = "AkShare / Eastmoney Fundamentals"
 EASTMONEY_NOTICE_PROVIDER = "AkShare / Eastmoney Notices"
@@ -76,10 +77,62 @@ def fetch_quote_from_akshare(symbol: str) -> QuoteResponse:
     if ak is None:
         raise SupplementalProviderUnavailableError("akshare is not installed")
 
+    unavailable = False
+    for fetcher in (_fetch_quote_from_akshare_xueqiu, _fetch_quote_from_akshare_snapshot):
+        try:
+            return fetcher(symbol)
+        except SupplementalProviderNotFoundError:
+            continue
+        except SupplementalProviderUnavailableError as exc:
+            unavailable = True
+            logger.warning("AkShare quote fetch failed for %s via %s: %s", symbol, fetcher.__name__, exc)
+
+    if unavailable:
+        raise SupplementalProviderUnavailableError("AkShare quote request failed")
+
+    raise SupplementalProviderNotFoundError("AkShare returned no matching A-share quote")
+
+
+def _fetch_quote_from_akshare_xueqiu(symbol: str) -> QuoteResponse:
+    try:
+        quote_df = ak.stock_individual_spot_xq(symbol=_to_akshare_xueqiu_symbol(symbol), timeout=8)
+    except Exception as exc:  # pragma: no cover - network/runtime dependent
+        raise SupplementalProviderUnavailableError("AkShare Xueqiu quote request failed") from exc
+
+    item_map = _rows_to_item_map(quote_df)
+    if not item_map:
+        raise SupplementalProviderNotFoundError("AkShare Xueqiu returned empty quote payload")
+
+    price = _safe_float(_item_map_value(item_map, "现价", "最新价", "最新", "current"))
+    change = _safe_float(_item_map_value(item_map, "涨跌", "涨跌额", "change"))
+    change_percent = _safe_float(_item_map_value(item_map, "涨幅", "涨跌幅", "change_percent"))
+    previous_close = _safe_float(_item_map_value(item_map, "昨收", "前收盘", "昨收价", "pre_close", "previous_close"))
+    market_time = _coerce_datetime(_item_map_value(item_map, "时间", "更新时间", "交易时间"))
+    currency = _pick_first_text(_item_map_value(item_map, "货币", "currency"), "CNY") or "CNY"
+
+    if price is None:
+        raise SupplementalProviderNotFoundError("AkShare Xueqiu returned empty quote price")
+    if change is None and previous_close is not None:
+        change = price - previous_close
+    if change_percent is None and previous_close not in (None, 0):
+        change_percent = ((price - previous_close) / previous_close) * 100
+
+    return QuoteResponse(
+        symbol=symbol,
+        price=round(price, 4),
+        change=round(change or 0.0, 4),
+        change_percent=round(change_percent or 0.0, 4),
+        currency=currency,
+        market_time=market_time,
+        provider=AKSHARE_XUEQIU_QUOTE_PROVIDER,
+    )
+
+
+def _fetch_quote_from_akshare_snapshot(symbol: str) -> QuoteResponse:
     try:
         quote_df = ak.stock_zh_a_spot_em()
     except Exception as exc:  # pragma: no cover - network/runtime dependent
-        raise SupplementalProviderUnavailableError("AkShare quote request failed") from exc
+        raise SupplementalProviderUnavailableError("AkShare snapshot quote request failed") from exc
 
     row = _find_row_by_code(quote_df, _base_symbol(symbol))
     if row is None:
@@ -89,6 +142,7 @@ def fetch_quote_from_akshare(symbol: str) -> QuoteResponse:
     change = _safe_float(row.get("涨跌额"))
     change_percent = _safe_float(row.get("涨跌幅"))
     previous_close = _safe_float(row.get("昨收"))
+    market_time = _coerce_datetime(_pick_first_value(row.get("时间戳"), row.get("更新时间")))
 
     if price is None:
         raise SupplementalProviderNotFoundError("AkShare returned empty quote price")
@@ -103,7 +157,7 @@ def fetch_quote_from_akshare(symbol: str) -> QuoteResponse:
         change=round(change or 0.0, 4),
         change_percent=round(change_percent or 0.0, 4),
         currency="CNY",
-        market_time=datetime.now(timezone.utc),
+        market_time=market_time,
         provider=AKSHARE_QUOTE_PROVIDER,
     )
 
@@ -528,6 +582,17 @@ def _base_symbol(symbol: str) -> str:
     return symbol.split(".", 1)[0]
 
 
+def _to_akshare_xueqiu_symbol(symbol: str) -> str:
+    code = _base_symbol(symbol)
+    if symbol.endswith(".SZ"):
+        return f"SZ{code}"
+    if symbol.endswith(".SS"):
+        return f"SH{code}"
+    if symbol.endswith(".BJ"):
+        return f"BJ{code}"
+    return code
+
+
 def _to_ts_code(symbol: str) -> str:
     if symbol.endswith((".SZ", ".SS", ".BJ")):
         return symbol
@@ -592,6 +657,24 @@ def _compose_source(provider: str, publisher: str | None) -> str:
     if publisher and publisher != provider:
         return f"{provider} / {publisher}"
     return provider
+
+
+def _rows_to_item_map(dataframe: Any) -> dict[str, Any]:
+    item_map: dict[str, Any] = {}
+    for row in _iter_rows(dataframe):
+        key = _pick_first_text(row.get("item"), row.get("项目"), row.get("名称"), row.get("key"))
+        value = _pick_first_value(row.get("value"), row.get("值"), row.get("数据"))
+        if not key or value is None:
+            continue
+        item_map[key] = value
+    return item_map
+
+
+def _item_map_value(item_map: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in item_map and item_map[key] not in (None, ""):
+            return item_map[key]
+    return None
 
 
 def _pick_first_text(*values: Any) -> str | None:

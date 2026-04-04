@@ -165,8 +165,8 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
       setSummarySection(createSection("loading"));
 
       const [quoteResult, newsResult] = await Promise.allSettled([
-        getQuote(normalized, { fresh: true }),
-        getNews(normalized, 6, { fresh: true }),
+        getQuote(normalized),
+        getNews(normalized, 6),
       ]);
 
       if (cancelled) return;
