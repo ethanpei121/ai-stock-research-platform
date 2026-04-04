@@ -148,7 +148,6 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
     if (!open || !symbol) return;
 
     let cancelled = false;
-    let retried = false;
     const normalized = symbol.trim().toUpperCase();
 
     const run = async () => {
@@ -193,37 +192,28 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
         return;
       }
 
-      const fallbackSummary = () => {
-        const summary = buildLocalSummary(normalized, resolvedQuote!, resolvedNews!);
-        setSummarySection({ status: "success", data: summary, error: null });
-      };
+      // Strategy: show local template immediately, then try AI upgrade in background
+      const localSummary = buildLocalSummary(normalized, resolvedQuote!, resolvedNews!);
+      setSummarySection({ status: "success", data: localSummary, error: null });
 
-      const attemptAi = async () => {
+      // Background AI upgrade attempt (non-blocking)
+      const attemptAiUpgrade = async () => {
         try {
-          const summary = await getSummary(normalized, {
+          const aiSummary = await getSummary(normalized, {
             fresh: true,
             quote: resolvedQuote,
             news: resolvedNews,
             includeSupplemental: false,
           });
           if (!cancelled) {
-            setSummarySection({ status: "success", data: summary, error: null });
+            setSummarySection({ status: "success", data: aiSummary, error: null });
           }
         } catch {
-          if (cancelled) return;
-          if (!retried) {
-            retried = true;
-            fallbackSummary();
-            setTimeout(() => {
-              if (!cancelled) void attemptAi();
-            }, 2000);
-            return;
-          }
-          fallbackSummary();
+          // AI failed — keep the local summary already displayed, no action needed
         }
       };
 
-      void attemptAi();
+      void attemptAiUpgrade();
     };
 
     void run();

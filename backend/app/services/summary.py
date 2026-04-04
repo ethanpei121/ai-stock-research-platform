@@ -26,7 +26,7 @@ from app.services.market_data import get_news, get_quote, normalize_symbol
 
 
 logger = logging.getLogger(__name__)
-LLM_SUMMARY_TIMEOUT_SECONDS = 8.0
+LLM_SUMMARY_TIMEOUT_SECONDS = 20.0
 
 POSITIVE_KEYWORDS = (
     "beat",

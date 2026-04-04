@@ -44,21 +44,35 @@ async function parseError(response: Response): Promise<Error> {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(buildUrl(path), {
-    ...init,
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+async function request<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  const timeoutMs = init?.timeoutMs ?? 15_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    throw await parseError(response);
+  try {
+    const response = await fetch(buildUrl(path), {
+      ...init,
+      signal: controller.signal,
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("请求超时，后端响应时间过长，请稍后重试。");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return (await response.json()) as T;
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -265,6 +279,7 @@ export async function getSummary(symbol: string, options?: SummaryOptions): Prom
   return normalizeSummary(
     await request<unknown>("/api/v1/summary", {
       method: "POST",
+      timeoutMs: 25_000,
       body: JSON.stringify({
         symbol,
         fresh: options?.fresh ?? true,
