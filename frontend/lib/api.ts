@@ -10,7 +10,7 @@ import type {
 } from "@/lib/types";
 
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(/\/+$/, "");
-const CLIENT_API_BASE = "";
+const CLIENT_API_BASE = API_TARGET;
 
 type FreshOptions = {
   fresh?: boolean;
