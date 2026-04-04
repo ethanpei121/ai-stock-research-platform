@@ -36,43 +36,49 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-slate-50/80 backdrop-blur-xl">
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4 rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-900/5 sm:px-5">
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-600">Market Intelligence</p>
-                <h1 className="text-base font-bold text-slate-900 sm:text-lg">AI Market Terminal</h1>
-              </div>
-            </div>
+    <header className="sticky top-0 z-40 border-b border-terminal-border bg-terminal-bg/80 backdrop-blur-xl">
+      <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center gap-4 px-4 sm:px-6">
+        {/* Logo */}
+        <div className="flex shrink-0 items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-dark shadow-glow-sm">
+            <Sparkles className="h-3.5 w-3.5 text-white" />
           </div>
+          <div className="hidden sm:block">
+            <h1 className="text-sm font-bold tracking-tight text-terminal-text">AI Market Terminal</h1>
+          </div>
+        </div>
 
-          <form className="flex w-full max-w-lg items-center gap-2" onSubmit={handleSubmit}>
+        {/* Search — centered */}
+        <form className="flex min-w-0 flex-1 justify-center" onSubmit={handleSubmit}>
+          <div className="flex w-full max-w-lg items-center gap-2 rounded-xl border border-terminal-border bg-terminal-card/60 px-3 py-2 transition focus-within:border-accent/30 focus-within:shadow-glow-sm">
+            <Search className="h-4 w-4 shrink-0 text-terminal-dim" />
             <label htmlFor="global-symbol-search" className="sr-only">
-              Search stock symbol
+              搜索股票代码
             </label>
-            <div className="flex flex-1 items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-900/5 transition focus-within:bg-white focus-within:ring-indigo-200">
-              <Search className="h-4 w-4 text-slate-400" />
-              <input
-                id="global-symbol-search"
-                value={query}
-                maxLength={12}
-                placeholder="搜索代码，例如 AAPL 或 300750"
-                className="w-full border-0 bg-transparent font-mono text-sm font-semibold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
-                onChange={(event) => setQuery(event.target.value.toUpperCase())}
-              />
-            </div>
+            <input
+              id="global-symbol-search"
+              value={query}
+              maxLength={12}
+              placeholder="输入代码搜索，如 AAPL、300750"
+              className="terminal-input"
+              onChange={(event) => setQuery(event.target.value.toUpperCase())}
+            />
             <button
               type="submit"
-              className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800"
+              className="shrink-0 rounded-lg bg-accent-dark px-3 py-1 text-xs font-semibold text-white transition hover:bg-accent"
             >
               分析
             </button>
-          </form>
+          </div>
+        </form>
+
+        {/* Right slot */}
+        <div className="flex shrink-0 items-center gap-2">
+          {activeSymbol ? (
+            <span className="terminal-pill-accent">
+              {activeSymbol}
+            </span>
+          ) : null}
         </div>
       </div>
     </header>

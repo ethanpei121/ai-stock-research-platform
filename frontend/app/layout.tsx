@@ -7,19 +7,17 @@ import "./globals.css";
 
 
 export const metadata: Metadata = {
-  title: "AI Market Terminal",
-  description: "Enterprise-style market dashboard for equity recommendations and AI-backed stock analysis.",
+  title: "AI Market Terminal — 智能投研平台",
+  description: "实时股票行情、AI 投研简报、推荐股票池。支持 A 股与美股的行情聚合、新闻追踪和多维度评分分析。",
 };
 
 
 function HeaderFallback() {
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-slate-50/80 backdrop-blur-xl">
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-4 rounded-2xl bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-900/5 sm:px-5">
-          <div className="h-10 w-52 animate-pulse rounded-xl bg-slate-100" />
-          <div className="h-11 w-full max-w-lg animate-pulse rounded-xl bg-slate-100" />
-        </div>
+    <header className="sticky top-0 z-40 border-b border-terminal-border bg-terminal-bg/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-14 w-full max-w-[1440px] items-center justify-between px-4 sm:px-6">
+        <div className="h-6 w-36 animate-pulse rounded-lg bg-terminal-card" />
+        <div className="h-9 w-full max-w-md animate-pulse rounded-xl bg-terminal-card" />
       </div>
     </header>
   );
@@ -33,12 +31,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
-        <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.10),transparent_22%),linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] [background-size:auto,28px_28px,28px_28px]">
-          <Suspense fallback={<HeaderFallback />}>
-            <AppHeader />
-          </Suspense>
-          <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+      <body className="min-h-screen bg-terminal-bg font-sans text-terminal-text antialiased">
+        <div className="min-h-screen bg-grid-pattern bg-grid bg-terminal-bg/95">
+          <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.08),transparent_50%)]" />
+          <div className="relative">
+            <Suspense fallback={<HeaderFallback />}>
+              <AppHeader />
+            </Suspense>
+            <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6">
+              {children}
+            </main>
+          </div>
         </div>
       </body>
     </html>

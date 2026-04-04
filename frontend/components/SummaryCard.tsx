@@ -1,4 +1,5 @@
-import { Lightbulb, Loader2, MapPinned, RefreshCcw, ShieldAlert, TimerReset } from "lucide-react";
+import { ChevronDown, Lightbulb, Loader2, MapPinned, ShieldAlert } from "lucide-react";
+import { useState } from "react";
 
 import { formatDateTime } from "@/lib/formatters";
 import type { AsyncSection, SummaryResponse } from "@/lib/types";
@@ -8,141 +9,135 @@ type SummaryCardProps = {
 };
 
 function getProviderLabel(section: AsyncSection<SummaryResponse>): string | null {
-  if (section.status !== "success" || !section.data) {
-    return null;
-  }
-
+  if (section.status !== "success" || !section.data) return null;
   const meta = section.data.meta;
-  if (!meta || meta.is_fallback) {
-    return "模板回退";
-  }
-
-  const provider = meta.provider === "dashscope" ? "阿里云千问" : meta.provider === "openai" ? "OpenAI" : meta.provider;
-  return meta.model ? `${provider} / ${meta.model}` : provider;
+  if (!meta || meta.is_fallback) return "模板回退";
+  const provider = meta.provider === "dashscope" ? "千问" : meta.provider === "openai" ? "OpenAI" : meta.provider;
+  return meta.model ? `${provider} · ${meta.model}` : provider;
 }
 
 function SummaryLoadingState() {
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
-      <div className="flex items-center gap-4 rounded-2xl bg-indigo-50 px-4 py-4 ring-1 ring-indigo-100">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm ring-1 ring-indigo-100">
-          <Loader2 className="h-5 w-5 animate-spin" />
+    <div className="terminal-card p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-muted text-accent">
+          <Loader2 className="h-4 w-4 animate-spin" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-slate-900">AI 正在撰写投研简报...</p>
-          <p className="mt-1 text-sm text-slate-500">利好、风险与结论会在这一块逐步回填。</p>
+          <p className="text-sm font-medium text-terminal-text">AI 正在撰写简报...</p>
+          <p className="text-xs text-terminal-dim">利好、风险与结论生成中。</p>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 export function SummaryCard({ section }: SummaryCardProps) {
+  const [showMeta, setShowMeta] = useState(false);
   const providerLabel = getProviderLabel(section);
 
-  if (section.status === "loading") {
-    return <SummaryLoadingState />;
-  }
+  if (section.status === "loading") return <SummaryLoadingState />;
 
   if (section.status === "error") {
-    return <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600 shadow-sm ring-1 ring-rose-100">{section.error}</p>;
+    return (
+      <div className="rounded-xl border border-loss-border bg-loss-bg px-4 py-3 text-sm text-loss">
+        {section.error}
+      </div>
+    );
   }
 
   if (section.status !== "success" || !section.data) {
-    return <p className="rounded-2xl bg-slate-100 px-4 py-3 text-sm text-slate-500 shadow-sm ring-1 ring-slate-900/5">等待生成分析师备忘录。</p>;
+    return (
+      <div className="terminal-card px-4 py-3 text-sm text-terminal-dim">等待生成分析简报。</div>
+    );
   }
 
   const { meta } = section.data;
   const isFallback = meta?.is_fallback ?? true;
-  const latestQuoteTime = meta?.quote_market_time ? formatDateTime(meta.quote_market_time) : "--";
-  const latestNewsTime = meta?.latest_news_time ? formatDateTime(meta.latest_news_time) : "--";
-  const newsProviders = meta?.news_providers?.length ? meta.news_providers.join(" / ") : "--";
 
   return (
-    <section className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5">
-      <div className="flex flex-col gap-4 border-b border-slate-200/80 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-indigo-600">Analyst Memo</p>
-          <h3 className="mt-2 text-lg font-bold text-slate-900">AI 投研简报</h3>
-        </div>
+    <div className="terminal-card overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-terminal-border px-4 py-3">
+        <p className="terminal-section-title">AI 投研简报</p>
         {providerLabel ? (
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ring-1 ${
-              isFallback ? "bg-slate-100 text-slate-600 ring-slate-900/5" : "bg-emerald-50 text-emerald-700 ring-emerald-100"
-            }`}
-          >
+          <span className={`terminal-pill text-[10px] ${
+            isFallback
+              ? "border border-terminal-border bg-terminal-card text-terminal-dim"
+              : "border border-gain-border bg-gain-bg text-gain"
+          }`}>
             {providerLabel}
           </span>
         ) : null}
       </div>
 
-      <div className="grid gap-4 px-5 py-5">
-        <section className="grid gap-3 rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-900/5 sm:grid-cols-2">
-          <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-3 ring-1 ring-slate-900/5">
-            <div className="mt-0.5 rounded-lg bg-indigo-50 p-2 text-indigo-600">
-              <RefreshCcw className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">本次刷新</p>
-              <p className="mt-1 text-sm font-medium text-slate-900">
-                {meta.force_refresh_used ? "已绕过缓存并重新抓取" : "可能使用缓存结果"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">系统会直连刷新本轮行情和新闻，再生成摘要。</p>
-              <p className="mt-1 text-xs text-slate-400">说明：最新指数据源当前可返回的最新一笔/最新资讯，不代表交易所毫秒级直连。</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 rounded-xl bg-white px-3 py-3 ring-1 ring-slate-900/5">
-            <div className="mt-0.5 rounded-lg bg-indigo-50 p-2 text-indigo-600">
-              <TimerReset className="h-4 w-4" />
-            </div>
-            <div className="grid gap-1 text-sm text-slate-700">
-              <p><span className="text-slate-500">行情来源:</span> {meta.quote_provider ?? "--"}</p>
-              <p><span className="text-slate-500">行情时间:</span> <span className="font-mono">{latestQuoteTime}</span></p>
-              <p><span className="text-slate-500">新闻最新:</span> <span className="font-mono">{latestNewsTime}</span></p>
-              <p><span className="text-slate-500">新闻源:</span> {newsProviders}</p>
-            </div>
-          </div>
-        </section>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-2xl bg-emerald-50 px-4 py-4 ring-1 ring-emerald-100">
-            <div className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-emerald-800">
-              <Lightbulb className="h-4 w-4" />
+      <div className="space-y-3 p-4">
+        {/* Bullish */}
+        {section.data.summary.bullish.length > 0 && (
+          <div className="rounded-xl border border-gain-border bg-gain-bg/50 px-3.5 py-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gain">
+              <Lightbulb className="h-3.5 w-3.5" />
               利好因素
             </div>
-            <ul className="space-y-2 pl-5 text-sm leading-6 text-slate-700">
+            <ul className="space-y-1.5 text-sm leading-relaxed text-terminal-text-secondary">
               {section.data.summary.bullish.map((item, index) => (
-                <li key={`${item}-${index}`} className="list-disc">
-                  {item}
+                <li key={`b-${index}`} className="flex gap-2">
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gain" />
+                  <span>{item}</span>
                 </li>
               ))}
             </ul>
-          </section>
+          </div>
+        )}
 
-          <section className="rounded-2xl bg-amber-50 px-4 py-4 ring-1 ring-amber-100">
-            <div className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-amber-800">
-              <ShieldAlert className="h-4 w-4" />
+        {/* Bearish */}
+        {section.data.summary.bearish.length > 0 && (
+          <div className="rounded-xl border border-warning-border bg-warning-bg/50 px-3.5 py-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-warning">
+              <ShieldAlert className="h-3.5 w-3.5" />
               风险因素
             </div>
-            <ul className="space-y-2 pl-5 text-sm leading-6 text-slate-700">
+            <ul className="space-y-1.5 text-sm leading-relaxed text-terminal-text-secondary">
               {section.data.summary.bearish.map((item, index) => (
-                <li key={`${item}-${index}`} className="list-disc">
-                  {item}
+                <li key={`r-${index}`} className="flex gap-2">
+                  <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-warning" />
+                  <span>{item}</span>
                 </li>
               ))}
             </ul>
-          </section>
+          </div>
+        )}
+
+        {/* Conclusion */}
+        <div className="rounded-xl border border-accent/20 bg-accent-muted px-3.5 py-3">
+          <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-accent-light">
+            <MapPinned className="h-3.5 w-3.5" />
+            结论
+          </div>
+          <p className="text-sm leading-relaxed text-terminal-text-secondary">
+            {section.data.summary.conclusion}
+          </p>
         </div>
 
-        <section className="rounded-2xl bg-indigo-50 px-4 py-4 ring-1 ring-indigo-100">
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-800">
-            <MapPinned className="h-4 w-4" />
-            结论与执行建议
+        {/* Collapsible meta */}
+        <button
+          type="button"
+          onClick={() => setShowMeta(!showMeta)}
+          className="flex w-full items-center gap-1.5 text-[10px] text-terminal-dim transition hover:text-terminal-muted"
+        >
+          <ChevronDown className={`h-3 w-3 transition ${showMeta ? "rotate-180" : ""}`} />
+          数据来源详情
+        </button>
+        {showMeta && meta && (
+          <div className="grid gap-1 rounded-lg border border-terminal-border bg-terminal-card/50 px-3 py-2 text-[11px] text-terminal-dim">
+            <span>行情来源: {meta.quote_provider ?? "--"}</span>
+            <span>行情时间: {meta.quote_market_time ? formatDateTime(meta.quote_market_time) : "--"}</span>
+            <span>新闻最新: {meta.latest_news_time ? formatDateTime(meta.latest_news_time) : "--"}</span>
+            <span>新闻源: {meta.news_providers?.join(" / ") || "--"}</span>
+            <span>刷新: {meta.force_refresh_used ? "已绕过缓存" : "可能使用缓存"}</span>
           </div>
-          <p className="mt-3 text-sm leading-7 text-slate-700">{section.data.summary.conclusion}</p>
-        </section>
+        )}
       </div>
-    </section>
+    </div>
   );
 }

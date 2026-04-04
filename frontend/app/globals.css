@@ -1,3 +1,129 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+
+  ::selection {
+    background-color: rgba(99, 102, 241, 0.3);
+    color: #f1f5f9;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer components {
+  .terminal-card {
+    @apply rounded-2xl border border-terminal-border bg-terminal-card/80 backdrop-blur-sm;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .terminal-card:hover {
+    @apply border-terminal-border-hover shadow-card-hover;
+  }
+
+  .terminal-card-interactive {
+    @apply terminal-card cursor-pointer;
+  }
+
+  .terminal-card-interactive:hover {
+    @apply border-terminal-border-hover shadow-card-hover;
+  }
+
+  .terminal-card-interactive:active {
+    @apply scale-[0.995];
+    transition: transform 0.1s ease;
+  }
+
+  .terminal-input {
+    @apply w-full border-0 bg-transparent font-mono text-sm font-medium text-terminal-text outline-none placeholder:font-sans placeholder:font-normal placeholder:text-terminal-dim;
+  }
+
+  .terminal-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.2em] text-terminal-dim;
+  }
+
+  .terminal-section-title {
+    @apply text-[10px] font-bold uppercase tracking-[0.2em] text-accent;
+  }
+
+  .terminal-pill {
+    @apply inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium;
+  }
+
+  .terminal-pill-default {
+    @apply terminal-pill border border-terminal-border bg-terminal-card text-terminal-muted;
+  }
+
+  .terminal-pill-accent {
+    @apply terminal-pill border border-accent/20 bg-accent-muted text-accent-light;
+  }
+
+  .terminal-pill-gain {
+    @apply terminal-pill border border-gain-border bg-gain-bg text-gain;
+  }
+
+  .terminal-pill-loss {
+    @apply terminal-pill border border-loss-border bg-loss-bg text-loss;
+  }
+
+  .terminal-divider {
+    @apply h-px bg-terminal-border;
+  }
+
+  .terminal-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-accent-dark px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-accent hover:shadow-glow-sm disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .terminal-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-terminal-border px-4 py-2.5 text-sm font-medium text-terminal-muted transition hover:border-terminal-border-hover hover:text-terminal-text;
+  }
+}
+
+@layer utilities {
+  .text-gain-adaptive {
+    @apply text-gain;
+  }
+
+  .text-loss-adaptive {
+    @apply text-loss;
+  }
+
+  .bg-gain-adaptive {
+    @apply bg-gain-bg;
+  }
+
+  .bg-loss-adaptive {
+    @apply bg-loss-bg;
+  }
+}
