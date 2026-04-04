@@ -166,7 +166,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
 
       const [quoteResult, newsResult] = await Promise.allSettled([
         getQuote(normalized),
-        getNews(normalized, 6),
+        getNews(normalized, 20),
       ]);
 
       if (cancelled) return;

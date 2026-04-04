@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -209,41 +210,57 @@ export function HomePageClient() {
   };
 
   return (
-    <div
-      className={`grid items-start gap-5 transition-[grid-template-columns] duration-300 ease-out ${
-        isPanelOpen
-          ? "xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] xl:h-[calc(100vh-5rem)] xl:overflow-hidden"
-          : "xl:grid-cols-1"
-      }`}
-    >
-      {/* Left: Recommendations */}
-      <div
-        className={`space-y-4 transition-[max-width] duration-300 xl:h-full xl:overflow-y-auto xl:pr-2 ${
-          isPanelOpen ? "" : "mx-auto w-full max-w-6xl"
-        }`}
-      >
-        <RecommendationsWorkspace
-          section={recommendationSection}
-          quoteSnapshots={recommendationQuoteSnapshots}
-          activeSymbol={activeSymbol}
-          selectedCategory={selectedRecommendationCategory}
-          selectedStyle={selectedRecommendationStyle}
-          isRefreshing={isRecommendationRefreshing}
-          refreshError={recommendationRefreshError}
-          onCategoryChange={setSelectedRecommendationCategory}
-          onStyleChange={setSelectedRecommendationStyle}
-          onOpenSymbol={updateDrawerSymbol}
-          onRefresh={refreshRecommendations}
-        />
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-warning-border bg-warning-bg/70 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-warning-border bg-warning-bg text-warning">
+            <ShieldAlert className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-warning">风险提示</p>
+            <p className="mt-1 text-sm leading-6 text-terminal-text-secondary">
+              本分析系统基于 AI 大模型结果与公开市场数据自动生成，仅供参考，不构成任何投资建议。请结合公司公告、财务信息与自身风险承受能力独立判断。
+            </p>
+          </div>
+        </div>
       </div>
 
-      {/* Right: Analysis drawer */}
-      <AnalysisDrawer
-        symbol={activeSymbol || null}
-        companyName={activeCompanyName}
-        open={isPanelOpen}
-        onClose={() => updateDrawerSymbol(null)}
-      />
+      <div
+        className={`grid items-start gap-5 transition-[grid-template-columns] duration-300 ease-out ${
+          isPanelOpen
+            ? "xl:grid-cols-[minmax(0,1.4fr)_minmax(380px,1fr)] xl:h-[calc(100vh-5rem)] xl:overflow-hidden"
+            : "xl:grid-cols-1"
+        }`}
+      >
+        {/* Left: Recommendations */}
+        <div
+          className={`space-y-4 transition-[max-width] duration-300 xl:h-full xl:overflow-y-auto xl:pr-2 ${
+            isPanelOpen ? "" : "mx-auto w-full max-w-6xl"
+          }`}
+        >
+          <RecommendationsWorkspace
+            section={recommendationSection}
+            quoteSnapshots={recommendationQuoteSnapshots}
+            activeSymbol={activeSymbol}
+            selectedCategory={selectedRecommendationCategory}
+            selectedStyle={selectedRecommendationStyle}
+            isRefreshing={isRecommendationRefreshing}
+            refreshError={recommendationRefreshError}
+            onCategoryChange={setSelectedRecommendationCategory}
+            onStyleChange={setSelectedRecommendationStyle}
+            onOpenSymbol={updateDrawerSymbol}
+            onRefresh={refreshRecommendations}
+          />
+        </div>
+
+        {/* Right: Analysis drawer */}
+        <AnalysisDrawer
+          symbol={activeSymbol || null}
+          companyName={activeCompanyName}
+          open={isPanelOpen}
+          onClose={() => updateDrawerSymbol(null)}
+        />
+      </div>
     </div>
   );
 }
