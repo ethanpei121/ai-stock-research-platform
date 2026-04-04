@@ -10,6 +10,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   return proxyBackend("/api/v1/summary", {
     method: "POST",
     body,
+    timeoutMs: 55_000,
     headers: {
       "Content-Type": request.headers.get("content-type") ?? "application/json",
     },

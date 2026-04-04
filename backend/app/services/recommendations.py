@@ -19,17 +19,18 @@ from app.schemas.market import (
     RecommendationsResponse,
     RecommendationStock,
 )
-from app.services.market_data import MOCK_PROVIDER, get_news, get_quote, normalize_symbol
+from app.services.market_data import MOCK_PROVIDER, get_quote, normalize_symbol
 
 
 logger = logging.getLogger(__name__)
 
 RECOMMENDATIONS_CACHE = TTLCache[RecommendationsResponse](ttl_seconds=1800)
 STOCK_ANALYSIS_CACHE = TTLCache[RecommendationStock](ttl_seconds=1800)
+LATEST_RECOMMENDATIONS_SNAPSHOT: RecommendationsResponse | None = None
 STYLE_FILTER_PRIORITY = ["热门", "稳健", "高弹性", "A股", "美股"]
 ANALYST_PROVIDER = "Yahoo Finance Analyst Consensus"
 PRICE_HISTORY_PROVIDER = "Yahoo Finance Price History"
-MAX_WORKERS = 6
+MAX_WORKERS = 4
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,8 @@ CANDIDATE_GROUPS: tuple[CandidateGroup, ...] = (
 
 
 def get_recommendations() -> RecommendationsResponse:
+    global LATEST_RECOMMENDATIONS_SNAPSHOT
+
     cached_response = RECOMMENDATIONS_CACHE.get("default")
     if cached_response is not None:
         return cached_response
@@ -267,6 +270,10 @@ def get_recommendations() -> RecommendationsResponse:
         )
 
     if not groups:
+        if LATEST_RECOMMENDATIONS_SNAPSHOT is not None:
+            logger.warning("Recommendation generation returned no groups, serving last successful snapshot instead.")
+            return LATEST_RECOMMENDATIONS_SNAPSHOT
+
         raise APIError(
             status_code=502,
             code="RECOMMENDATIONS_UNAVAILABLE",
@@ -279,27 +286,36 @@ def get_recommendations() -> RecommendationsResponse:
         categories=categories,
         style_filters=_derive_style_filters(groups),
         methodology=(
-            "推荐结果先在预设龙头观察池中选股，再基于真实价格历史、成交量变化、近7天真实新闻数量，"
-            "以及 Yahoo Finance 可提供的分析师目标价/一致预期/增长字段打分。若某维度缺少公开数据，"
-            "该维度按中性处理，并在卡片中直接展示数据不足。"
+            "实时推荐会先在预设观察池中选股，再优先用最新报价与近 6 个月价格/成交量历史计算动量、量能、"
+            "波动与当日强弱。若新闻或分析师公开字段无法在时限内稳定获取，则对应维度按中性处理，"
+            "确保接口优先稳定返回可排序结果。"
         ),
         data_sources=[
             PRICE_HISTORY_PROVIDER,
-            "Yahoo Finance / Alpha Vantage / Finnhub 行情",
-            "Yahoo Finance / Google News RSS / Alpha Vantage 新闻",
-            ANALYST_PROVIDER,
+            "Yahoo Finance / Alpha Vantage / Finnhub / AkShare 行情",
         ],
         groups=groups,
     )
-    return RECOMMENDATIONS_CACHE.set("default", response)
+    cached = RECOMMENDATIONS_CACHE.set("default", response)
+    LATEST_RECOMMENDATIONS_SNAPSHOT = cached
+    return cached
 
 
 def _analyze_candidate_universe() -> dict[str, RecommendationStock]:
     analyses: dict[str, RecommendationStock] = {}
     candidates = [candidate for group in CANDIDATE_GROUPS for candidate in group.stocks]
+    normalized_symbols = list(dict.fromkeys(normalize_symbol(candidate.symbol) for candidate in candidates))
+    preloaded_histories = _download_histories(normalized_symbols)
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        future_map = {executor.submit(_analyze_candidate, candidate): candidate for candidate in candidates}
+        future_map = {
+            executor.submit(
+                _analyze_candidate,
+                candidate,
+                preloaded_histories.get(normalize_symbol(candidate.symbol)),
+            ): candidate
+            for candidate in candidates
+        }
         for future in as_completed(future_map):
             candidate = future_map[future]
             try:
@@ -314,36 +330,24 @@ def _analyze_candidate_universe() -> dict[str, RecommendationStock]:
     return analyses
 
 
-def _analyze_candidate(candidate: CandidateStock) -> RecommendationStock | None:
+def _analyze_candidate(candidate: CandidateStock, preloaded_history: Any | None = None) -> RecommendationStock | None:
     normalized_symbol = normalize_symbol(candidate.symbol)
     cached_stock = STOCK_ANALYSIS_CACHE.get(normalized_symbol)
     if cached_stock is not None:
         return cached_stock.model_copy(update={"symbol": candidate.symbol})
 
     quote = get_quote(normalized_symbol)
-
-    try:
-        news = get_news(normalized_symbol, limit=10)
-    except Exception as exc:
-        logger.warning("Recommendation news fallback triggered for %s: %s", candidate.symbol, exc)
-        news = None
-
-    ticker = yf.Ticker(normalized_symbol)
-    history = _safe_history(ticker)
-    info = _safe_info(ticker)
-    metrics = _build_metrics(quote=quote, news=news, history=history, info=info)
+    history = preloaded_history
+    if history is None:
+        ticker = yf.Ticker(normalized_symbol)
+        history = _safe_history(ticker)
+    metrics = _build_metrics(quote=quote, news=None, history=history, info={})
     scorecard = _build_scorecard(metrics)
     styles = _derive_styles(candidate.market, metrics, scorecard)
 
-    company_name = _pick_first_text(
-        info.get("shortName"),
-        info.get("longName"),
-        candidate.company_name,
-    ) or candidate.company_name
-
     stock = RecommendationStock(
         symbol=candidate.symbol,
-        company_name=company_name,
+        company_name=candidate.company_name,
         market=candidate.market,
         region=candidate.region,
         rationale=_build_rationale(metrics, scorecard),
@@ -365,6 +369,54 @@ def _analyze_candidate(candidate: CandidateStock) -> RecommendationStock | None:
     )
     cached = STOCK_ANALYSIS_CACHE.set(normalized_symbol, stock)
     return cached.model_copy(update={"symbol": candidate.symbol})
+
+
+def _download_histories(symbols: list[str]) -> dict[str, Any]:
+    if not symbols:
+        return {}
+
+    try:
+        downloaded = yf.download(
+            tickers=" ".join(symbols),
+            period="6mo",
+            interval="1d",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+            group_by="ticker",
+            timeout=10,
+        )
+    except Exception as exc:
+        logger.warning("Recommendation bulk history fetch failed: %s", exc)
+        return {}
+
+    histories: dict[str, Any] = {}
+    for symbol in symbols:
+        history = _extract_downloaded_history(downloaded, symbol)
+        if history is not None:
+            histories[symbol] = history
+
+    return histories
+
+
+def _extract_downloaded_history(downloaded: Any, symbol: str) -> Any:
+    if downloaded is None or getattr(downloaded, "empty", True):
+        return None
+
+    columns = getattr(downloaded, "columns", None)
+    if hasattr(columns, "nlevels") and columns.nlevels > 1:
+        try:
+            history = downloaded[symbol]
+        except Exception:
+            try:
+                history = downloaded.xs(symbol, axis=1, level=0)
+            except Exception:
+                return None
+        if getattr(history, "empty", True):
+            return None
+        return history
+
+    return downloaded if "Close" in downloaded else None
 
 
 def _build_metrics(*, quote: Any, news: Any, history: Any, info: dict[str, Any]) -> StockMetrics:

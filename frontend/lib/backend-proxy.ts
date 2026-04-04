@@ -3,6 +3,9 @@ const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 const PROXY_TIMEOUT_MS = 30_000;
 
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? FALLBACK_API_TARGET).replace(/\/+$/, "");
+export type ProxyRequestInit = RequestInit & {
+  timeoutMs?: number;
+};
 
 function buildBackendUrl(path: string): string {
   return `${API_TARGET}${path.startsWith("/") ? path : `/${path}`}`;
@@ -21,18 +24,20 @@ function buildProxyErrorResponse(status: number, message: string, details: unkno
   );
 }
 
-export async function proxyBackend(path: string, init?: RequestInit): Promise<Response> {
-  const headers = new Headers(init?.headers ?? {});
-  if (init?.body && !headers.has("Content-Type")) {
+export async function proxyBackend(path: string, init?: ProxyRequestInit): Promise<Response> {
+  const { timeoutMs = PROXY_TIMEOUT_MS, ...requestInit } = init ?? {};
+
+  const headers = new Headers(requestInit.headers ?? {});
+  if (requestInit.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(buildBackendUrl(path), {
-      ...init,
+      ...requestInit,
       headers,
       signal: controller.signal,
       cache: "no-store",

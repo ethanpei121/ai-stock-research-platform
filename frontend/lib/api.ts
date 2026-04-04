@@ -10,7 +10,6 @@ import type {
 } from "@/lib/types";
 
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(/\/+$/, "");
-const CLIENT_API_BASE = API_TARGET;
 
 type FreshOptions = {
   fresh?: boolean;
@@ -24,7 +23,10 @@ type SummaryOptions = FreshOptions & {
 
 function buildUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${CLIENT_API_BASE}${normalizedPath}`;
+  if (typeof window !== "undefined") {
+    return normalizedPath;
+  }
+  return `${API_TARGET}${normalizedPath}`;
 }
 
 async function parseError(response: Response): Promise<Error> {
@@ -293,5 +295,9 @@ export async function getSummary(symbol: string, options?: SummaryOptions): Prom
 }
 
 export async function getRecommendations(): Promise<RecommendationsResponse> {
-  return normalizeRecommendations(await request<unknown>("/api/v1/recommendations"));
+  return normalizeRecommendations(
+    await request<unknown>("/api/v1/recommendations", {
+      timeoutMs: 65_000,
+    })
+  );
 }

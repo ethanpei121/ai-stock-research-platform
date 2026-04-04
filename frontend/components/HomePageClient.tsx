@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AnalysisDrawer } from "@/components/AnalysisDrawer";
@@ -16,9 +16,59 @@ const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSec
 });
 
 type RecommendationQuoteMap = Record<string, AsyncSection<Quote>>;
+const RECOMMENDATION_QUOTE_CONCURRENCY = 4;
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
+}
+
+function buildQuoteHydrationSymbols(
+  data: RecommendationsResponse,
+  selectedCategory: string,
+  selectedStyle: string,
+  activeSymbol: string
+): string[] {
+  const symbols: string[] = [];
+
+  if (activeSymbol) {
+    symbols.push(activeSymbol);
+  }
+
+  for (const group of data.groups) {
+    if (selectedCategory !== "全部" && group.category !== selectedCategory) {
+      continue;
+    }
+
+    for (const stock of group.stocks) {
+      if (selectedStyle !== "全部" && !stock.styles.includes(selectedStyle)) {
+        continue;
+      }
+      symbols.push(stock.symbol.toUpperCase());
+    }
+  }
+
+  return Array.from(new Set(symbols));
+}
+
+async function hydrateQuotesWithConcurrency(
+  symbols: string[],
+  workerCount: number,
+  worker: (symbol: string) => Promise<void>
+): Promise<void> {
+  const queue = [...symbols];
+  const totalWorkers = Math.min(workerCount, queue.length);
+
+  await Promise.all(
+    Array.from({ length: totalWorkers }, async () => {
+      while (queue.length > 0) {
+        const symbol = queue.shift();
+        if (!symbol) {
+          return;
+        }
+        await worker(symbol);
+      }
+    })
+  );
 }
 
 
@@ -36,6 +86,7 @@ export function HomePageClient() {
   const [isRecommendationRefreshing, setIsRecommendationRefreshing] = useState(false);
   const [recommendationRefreshError, setRecommendationRefreshError] = useState<string | null>(null);
   const [recommendationQuoteSnapshots, setRecommendationQuoteSnapshots] = useState<RecommendationQuoteMap>({});
+  const recommendationQuoteSnapshotsRef = useRef<RecommendationQuoteMap>({});
 
   const activeSymbol = (searchParams.get("symbol") ?? "").trim().toUpperCase();
   const isPanelOpen = activeSymbol.length > 0;
@@ -54,32 +105,44 @@ export function HomePageClient() {
   }
 
   useEffect(() => {
+    recommendationQuoteSnapshotsRef.current = recommendationQuoteSnapshots;
+  }, [recommendationQuoteSnapshots]);
+
+  useEffect(() => {
     if (!data) {
       return;
     }
 
-    const symbols = Array.from(
-      new Set(data.groups.flatMap((group) => group.stocks.map((stock) => stock.symbol.toUpperCase())))
+    const symbols = buildQuoteHydrationSymbols(
+      data,
+      selectedRecommendationCategory,
+      selectedRecommendationStyle,
+      activeSymbol
     );
 
     if (symbols.length === 0) {
-      setRecommendationQuoteSnapshots({});
       return;
     }
 
     let cancelled = false;
+    const pendingSymbols = symbols.filter(
+      (symbol) => recommendationQuoteSnapshotsRef.current[symbol]?.status !== "success"
+    );
+
+    if (pendingSymbols.length === 0) {
+      return;
+    }
 
     setRecommendationQuoteSnapshots((current) => {
-      const next: RecommendationQuoteMap = {};
-      for (const symbol of symbols) {
+      const next: RecommendationQuoteMap = { ...current };
+      for (const symbol of pendingSymbols) {
         next[symbol] = current[symbol]?.status === "success" ? current[symbol] : createSection("loading");
       }
       return next;
     });
 
     const hydrateQuotes = async () => {
-      // Fire all requests concurrently for faster loading
-      const promises = symbols.map(async (symbol) => {
+      await hydrateQuotesWithConcurrency(pendingSymbols, RECOMMENDATION_QUOTE_CONCURRENCY, async (symbol) => {
         try {
           const quote = await getQuote(symbol);
           if (!cancelled) {
@@ -97,8 +160,6 @@ export function HomePageClient() {
           }
         }
       });
-
-      await Promise.allSettled(promises);
     };
 
     void hydrateQuotes();
@@ -106,7 +167,7 @@ export function HomePageClient() {
     return () => {
       cancelled = true;
     };
-  }, [data]);
+  }, [activeSymbol, data, selectedRecommendationCategory, selectedRecommendationStyle]);
 
   const updateDrawerSymbol = (symbol: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
