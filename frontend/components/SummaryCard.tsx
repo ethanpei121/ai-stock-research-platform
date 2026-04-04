@@ -1,4 +1,4 @@
-import { ChevronDown, Lightbulb, Loader2, MapPinned, ShieldAlert } from "lucide-react";
+import { ChevronDown, Lightbulb, Loader2, MapPinned, RefreshCw, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 
 import { formatDateTime } from "@/lib/formatters";
@@ -6,6 +6,8 @@ import type { AsyncSection, SummaryResponse } from "@/lib/types";
 
 type SummaryCardProps = {
   section: AsyncSection<SummaryResponse>;
+  isRefreshing?: boolean;
+  onRefresh?: () => void;
 };
 
 function getProviderLabel(section: AsyncSection<SummaryResponse>): string | null {
@@ -32,7 +34,7 @@ function SummaryLoadingState() {
   );
 }
 
-export function SummaryCard({ section }: SummaryCardProps) {
+export function SummaryCard({ section, isRefreshing = false, onRefresh }: SummaryCardProps) {
   const [showMeta, setShowMeta] = useState(false);
   const providerLabel = getProviderLabel(section);
 
@@ -60,15 +62,28 @@ export function SummaryCard({ section }: SummaryCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-terminal-border px-4 py-3">
         <p className="terminal-section-title">AI 投研简报</p>
-        {providerLabel ? (
-          <span className={`terminal-pill text-[10px] ${
-            isFallback
-              ? "border border-terminal-border bg-terminal-card text-terminal-dim"
-              : "border border-gain-border bg-gain-bg text-gain"
-          }`}>
-            {providerLabel}
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {onRefresh ? (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="inline-flex items-center gap-1 rounded-lg border border-terminal-border px-2 py-1 text-[10px] text-terminal-dim transition hover:border-terminal-border-hover hover:text-terminal-text disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
+              <span>{isRefreshing ? "刷新中" : "刷新 AI"}</span>
+            </button>
+          ) : null}
+          {providerLabel ? (
+            <span className={`terminal-pill text-[10px] ${
+              isFallback
+                ? "border border-terminal-border bg-terminal-card text-terminal-dim"
+                : "border border-gain-border bg-gain-bg text-gain"
+            }`}>
+              {providerLabel}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-3 p-4">

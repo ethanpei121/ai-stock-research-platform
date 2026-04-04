@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas.market import NewsItem, QuoteResponse, SummaryContent, SummaryDataPoints, SummaryMeta, SummaryResponse
-from app.services.summary import generate_summary
+from app.services.summary import SUMMARY_CACHE, SummaryGenerationResult, generate_summary
 
 
 client = TestClient(app)
@@ -29,7 +29,7 @@ def test_quote_route_can_force_refresh() -> None:
         mock_get_quote.assert_called_once_with("AAPL", force_refresh=True)
 
 
-def test_summary_route_defaults_to_force_refresh() -> None:
+def test_summary_route_defaults_to_cached_mode() -> None:
     with patch("app.api.v1.market.generate_summary") as mock_generate_summary:
         now = datetime.now(timezone.utc)
         mock_generate_summary.return_value = SummaryResponse(
@@ -62,7 +62,7 @@ def test_summary_route_defaults_to_force_refresh() -> None:
         assert response.status_code == 200
         assert mock_generate_summary.call_count == 1
         assert mock_generate_summary.call_args.args[0] == "AAPL"
-        assert mock_generate_summary.call_args.kwargs["force_refresh"] is True
+        assert mock_generate_summary.call_args.kwargs["force_refresh"] is False
         assert mock_generate_summary.call_args.kwargs["include_supplemental"] is False
         assert mock_generate_summary.call_args.kwargs["quote"] is None
         assert mock_generate_summary.call_args.kwargs["news_items"] == []
@@ -115,3 +115,60 @@ def test_generate_summary_reuses_supplied_quote_and_news() -> None:
     assert response.data_points.news_count == 1
     assert response.meta.quote_provider == "Yahoo Finance"
     assert response.meta.news_providers == ["Yahoo Finance"]
+
+
+def test_generate_summary_uses_cache_for_identical_payload() -> None:
+    SUMMARY_CACHE.clear()
+    now = datetime.now(timezone.utc)
+    provided_quote = QuoteResponse(
+        symbol="AAPL",
+        price=189.12,
+        change=1.23,
+        change_percent=0.65,
+        currency="USD",
+        market_time=now,
+        provider="Yahoo Finance",
+    )
+    provided_news = [
+        NewsItem(
+            title="Apple launches new AI features",
+            url="https://example.com/apple-ai",
+            published_at=now,
+            source="Yahoo Finance",
+        )
+    ]
+
+    mocked_result = SummaryGenerationResult(
+        content=SummaryContent(
+            bullish=["利好 1", "利好 2"],
+            bearish=["风险 1", "风险 2"],
+            conclusion="结论内容",
+        ),
+        meta=SummaryMeta(
+            provider="dashscope",
+            model="qwen-plus-2025-07-28",
+            is_fallback=False,
+        ),
+    )
+
+    with patch("app.services.summary._generate_llm_summary", return_value=mocked_result) as mock_generate_llm:
+        first_response = generate_summary(
+            "AAPL",
+            force_refresh=False,
+            quote=provided_quote,
+            news_items=provided_news,
+            news_providers=["Yahoo Finance"],
+            include_supplemental=False,
+        )
+        second_response = generate_summary(
+            "AAPL",
+            force_refresh=False,
+            quote=provided_quote,
+            news_items=provided_news,
+            news_providers=["Yahoo Finance"],
+            include_supplemental=False,
+        )
+
+    assert mock_generate_llm.call_count == 1
+    assert first_response.summary.conclusion == "结论内容"
+    assert second_response.summary.conclusion == "结论内容"

@@ -98,7 +98,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=
 DASHSCOPE_API_KEY=
-DASHSCOPE_MODEL=qwen3-vl-8b-thinking
+DASHSCOPE_MODEL=qwen-plus-2025-07-28
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ALPHA_VANTAGE_API_KEY=
 FINNHUB_API_KEY=
@@ -114,7 +114,7 @@ TUSHARE_TOKEN=
 - 不配置额外 key 时，默认会使用 `Yahoo Finance` 获取行情；对 A 股会额外尝试 `AkShare / 东方财富` 行情、个股新闻、基本面与公告披露数据。
 - 如果你配置了 `ALPHA_VANTAGE_API_KEY` 或 `FINNHUB_API_KEY`，后端会在默认源之外自动启用更多行情与新闻 fallback。
 - 如果配置了 `TUSHARE_TOKEN`，A 股基本面与公告会额外接入 Tushare，增强财务指标和公告覆盖。
-- 如果使用阿里云百炼，请设置 `DASHSCOPE_API_KEY`、`DASHSCOPE_MODEL=qwen3-vl-8b-thinking` 和 `DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`。
+- 如果使用阿里云百炼，请设置 `DASHSCOPE_API_KEY`、`DASHSCOPE_MODEL=qwen-plus-2025-07-28` 和 `DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`。
 
 ### frontend/.env.example
 
@@ -142,7 +142,7 @@ NEXT_PUBLIC_API_BASE=http://localhost:8000
 可选环境变量：
 
 - `OPENAI_API_KEY` 或 `DASHSCOPE_API_KEY`
-- `OPENAI_MODEL=gpt-4o-mini` 或 `DASHSCOPE_MODEL=qwen3-vl-8b-thinking`
+- `OPENAI_MODEL=gpt-4o-mini` 或 `DASHSCOPE_MODEL=qwen-plus-2025-07-28`
 - `OPENAI_BASE_URL` / `DASHSCOPE_BASE_URL`
 - `ALPHA_VANTAGE_API_KEY`
 - `FINNHUB_API_KEY`
@@ -336,7 +336,7 @@ NEXT_PUBLIC_API_BASE=http://localhost:8000
   },
   "meta": {
     "provider": "dashscope",
-    "model": "qwen3-vl-8b-thinking",
+    "model": "qwen-plus-2025-07-28",
     "is_fallback": false
   }
 }

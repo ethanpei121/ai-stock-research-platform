@@ -84,7 +84,7 @@ function buildLocalSummary(symbol: string, quote: Quote, news: NewsResponse | nu
       provider: "template",
       model: null,
       is_fallback: true,
-      force_refresh_used: true,
+      force_refresh_used: false,
       quote_provider: quote.provider,
       quote_market_time: quote.market_time,
       latest_news_time: news ? getLatestNewsTimestamp(news) : null,
@@ -150,6 +150,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection());
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection());
   const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection());
+  const [isSummaryRefreshing, setIsSummaryRefreshing] = useState(false);
 
   useEffect(() => {
     if (!open || !symbol) return;
@@ -158,6 +159,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
     const normalized = symbol.trim().toUpperCase();
 
     const run = async () => {
+      setIsSummaryRefreshing(false);
       setQuoteSection(createSection("loading"));
       setNewsSection(createSection("loading"));
       setSummarySection(createSection("loading"));
@@ -212,7 +214,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
       const attemptAiUpgrade = async () => {
         try {
           const aiSummary = await getSummary(normalized, {
-            fresh: true,
+            fresh: false,
             quote: resolvedQuote,
             news: resolvedNews,
             includeSupplemental: false,
@@ -242,6 +244,33 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
   }, [open, onClose]);
 
   if (!open || !symbol) return null;
+
+  const refreshAiSummary = async () => {
+    if (
+      !symbol ||
+      quoteSection.status !== "success" ||
+      !quoteSection.data ||
+      newsSection.status !== "success" ||
+      !newsSection.data
+    ) {
+      return;
+    }
+
+    setIsSummaryRefreshing(true);
+    try {
+      const refreshedSummary = await getSummary(symbol, {
+        fresh: true,
+        quote: quoteSection.data,
+        news: newsSection.data,
+        includeSupplemental: false,
+      });
+      setSummarySection({ status: "success", data: refreshedSummary, error: null });
+    } catch {
+      // Keep the current summary if manual refresh fails.
+    } finally {
+      setIsSummaryRefreshing(false);
+    }
+  };
 
   const isLoading =
     quoteSection.status === "loading" ||
@@ -279,7 +308,13 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
           />
         ) : null}
         <QuoteCard symbol={symbol} section={quoteSection} />
-        <SummaryCard section={summarySection} />
+        <SummaryCard
+          section={summarySection}
+          isRefreshing={isSummaryRefreshing}
+          onRefresh={
+            quoteSection.status === "success" && newsSection.status === "success" ? refreshAiSummary : undefined
+          }
+        />
         <NewsList section={newsSection} />
       </div>
     </div>

@@ -284,7 +284,7 @@ export async function getSummary(symbol: string, options?: SummaryOptions): Prom
       timeoutMs: 50_000,
       body: JSON.stringify({
         symbol,
-        fresh: options?.fresh ?? true,
+        fresh: options?.fresh ?? false,
         quote: options?.quote ?? undefined,
         news_items: options?.news?.items ?? [],
         news_providers: options?.news?.providers ?? [],

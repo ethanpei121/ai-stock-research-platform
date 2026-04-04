@@ -21,6 +21,6 @@ services:
       - key: DASHSCOPE_API_KEY
         sync: false
       - key: DASHSCOPE_MODEL
-        value: qwen3-vl-8b-thinking
+        value: qwen-plus-2025-07-28
       - key: DASHSCOPE_BASE_URL
         value: https://dashscope.aliyuncs.com/compatible-mode/v1

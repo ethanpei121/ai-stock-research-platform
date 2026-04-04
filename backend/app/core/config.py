@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_base_url: str | None = None
     dashscope_api_key: str | None = None
-    dashscope_model: str | None = None
+    dashscope_model: str | None = "qwen-plus-2025-07-28"
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     alpha_vantage_api_key: str | None = None
     finnhub_api_key: str | None = None

@@ -78,7 +78,7 @@ class SummaryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     symbol: str = Field(..., min_length=1)
-    fresh: bool = True
+    fresh: bool = False
     quote: QuoteResponse | None = None
     news_items: list[NewsItem] = Field(default_factory=list)
     news_providers: list[str] = Field(default_factory=list)

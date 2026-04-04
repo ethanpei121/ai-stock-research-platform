@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Any
 
 from openai import OpenAI
 
+from app.core.cache import TTLCache
 from app.core.config import get_settings
 from app.core.errors import APIError
 from app.schemas.market import (
@@ -27,6 +29,11 @@ from app.services.market_data import get_news, get_quote, normalize_symbol
 
 logger = logging.getLogger(__name__)
 LLM_SUMMARY_TIMEOUT_SECONDS = 20.0
+SUMMARY_CACHE = TTLCache[SummaryResponse](ttl_seconds=900)
+SUMMARY_CACHE_VERSION = "summary-v2"
+SUMMARY_PROMPT_NEWS_LIMIT = 4
+SUMMARY_PROMPT_ANNOUNCEMENT_LIMIT = 2
+SUMMARY_MAX_OUTPUT_TOKENS = 320
 
 POSITIVE_KEYWORDS = (
     "beat",
@@ -74,6 +81,7 @@ def generate_summary(
     news_providers: list[str] | None = None,
     include_supplemental: bool = False,
 ) -> SummaryResponse:
+    settings = get_settings()
     normalized_symbol = normalize_symbol(symbol)
     resolved_quote = _resolve_quote(normalized_symbol, quote, force_refresh=force_refresh)
     resolved_news = _resolve_news(
@@ -98,12 +106,27 @@ def generate_summary(
         except APIError as exc:
             logger.info("Announcements unavailable for summary %s: %s", normalized_symbol, exc.code)
 
+    cache_key = _build_summary_cache_key(
+        symbol=normalized_symbol,
+        quote=resolved_quote,
+        news_items=resolved_news.items,
+        fundamentals=fundamentals,
+        announcements=announcements,
+        include_supplemental=include_supplemental,
+        settings=settings,
+    )
+    if not force_refresh:
+        cached_summary = SUMMARY_CACHE.get(cache_key)
+        if cached_summary is not None:
+            return cached_summary
+
     summary_result = _generate_llm_summary(
         normalized_symbol,
         resolved_quote,
         resolved_news.items,
         fundamentals,
         announcements,
+        settings,
     )
     if summary_result is None:
         summary_result = _generate_rule_summary(
@@ -116,7 +139,7 @@ def generate_summary(
 
     latest_news_time = max((item.published_at for item in resolved_news.items), default=None)
 
-    return SummaryResponse(
+    response = SummaryResponse(
         symbol=normalized_symbol,
         generated_at=generated_at or datetime.now(timezone.utc),
         summary=summary_result.content,
@@ -136,6 +159,7 @@ def generate_summary(
             news_providers=resolved_news.providers,
         ),
     )
+    return SUMMARY_CACHE.set(cache_key, response)
 
 
 def _resolve_quote(symbol: str, quote: QuoteResponse | None, *, force_refresh: bool) -> QuoteResponse:
@@ -188,11 +212,13 @@ def _generate_llm_summary(
     news_items: list[NewsItem],
     fundamentals: FundamentalsResponse | None,
     announcements: list[AnnouncementItem],
+    settings: Any,
 ) -> SummaryGenerationResult | None:
-    settings = get_settings()
     if not settings.llm_api_key:
         return None
 
+    selected_news_items = _select_summary_news_items(news_items)
+    selected_announcements = _select_summary_announcements(announcements)
     payload = {
         "symbol": symbol,
         "quote": {
@@ -223,19 +249,17 @@ def _generate_llm_summary(
                 "title": item.title,
                 "source": item.source,
                 "published_at": item.published_at.isoformat(),
-                "url": item.url,
             }
-            for item in news_items
+            for item in selected_news_items
         ],
         "announcements": [
             {
                 "title": item.title,
                 "source": item.source,
                 "published_at": item.published_at.isoformat(),
-                "url": item.url,
                 "category": item.category,
             }
-            for item in announcements
+            for item in selected_announcements
         ],
     }
 
@@ -248,14 +272,16 @@ def _generate_llm_summary(
         completion = client.chat.completions.create(
             model=settings.llm_model,
             temperature=0.2,
+            max_tokens=SUMMARY_MAX_OUTPUT_TOKENS,
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "你是一名谨慎的中文股票研究助理。"
-                        "请结合行情、新闻、基本面和公告，仅输出一个 JSON 对象，字段必须是 bullish、bearish、conclusion。"
-                        "bullish 和 bearish 必须是中文字符串数组，每个数组 2 到 4 条；"
-                        "conclusion 必须是 1 段中文结论。不要输出 markdown 解释。"
+                        "请基于给定的行情、新闻、基本面和公告做快速中文摘要。"
+                        "只输出一个 JSON 对象，字段必须是 bullish、bearish、conclusion。"
+                        "bullish 和 bearish 必须是 2 到 4 条中文短句数组；"
+                        "conclusion 必须是 1 段简洁中文结论；不要输出 markdown、解释或额外字段。"
                     ),
                 },
                 {
@@ -281,6 +307,75 @@ def _generate_llm_summary(
     except Exception as exc:
         logger.exception("LLM summary generation failed, falling back to rule template.", exc_info=exc)
         return None
+
+
+def _build_summary_cache_key(
+    *,
+    symbol: str,
+    quote: QuoteResponse,
+    news_items: list[NewsItem],
+    fundamentals: FundamentalsResponse | None,
+    announcements: list[AnnouncementItem],
+    include_supplemental: bool,
+    settings: Any,
+) -> str:
+    payload = {
+        "version": SUMMARY_CACHE_VERSION,
+        "symbol": symbol,
+        "include_supplemental": include_supplemental,
+        "llm_provider": "dashscope" if settings.dashscope_api_key else "openai" if settings.openai_api_key else "template",
+        "llm_model": settings.llm_model,
+        "quote": {
+            "price": quote.price,
+            "change": quote.change,
+            "change_percent": quote.change_percent,
+            "provider": quote.provider,
+            "market_time": quote.market_time.isoformat(),
+        },
+        "news": [
+            {
+                "title": item.title,
+                "source": item.source,
+                "published_at": item.published_at.isoformat(),
+            }
+            for item in news_items
+        ],
+        "fundamentals": None
+        if fundamentals is None
+        else {
+            "as_of": fundamentals.as_of.isoformat(),
+            "providers": fundamentals.providers,
+            "industry": fundamentals.industry,
+            "market_cap": fundamentals.market_cap,
+            "pe_ratio": fundamentals.pe_ratio,
+            "pb_ratio": fundamentals.pb_ratio,
+            "roe": fundamentals.roe,
+            "gross_margin": fundamentals.gross_margin,
+            "net_margin": fundamentals.net_margin,
+            "debt_to_asset": fundamentals.debt_to_asset,
+            "revenue_growth": fundamentals.revenue_growth,
+            "net_profit_growth": fundamentals.net_profit_growth,
+        },
+        "announcements": [
+            {
+                "title": item.title,
+                "source": item.source,
+                "published_at": item.published_at.isoformat(),
+                "category": item.category,
+            }
+            for item in announcements
+        ],
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _select_summary_news_items(news_items: list[NewsItem]) -> list[NewsItem]:
+    return news_items[:SUMMARY_PROMPT_NEWS_LIMIT]
+
+
+def _select_summary_announcements(announcements: list[AnnouncementItem]) -> list[AnnouncementItem]:
+    return announcements[:SUMMARY_PROMPT_ANNOUNCEMENT_LIMIT]
 
 
 def _extract_json_object(content: str) -> dict[str, Any]:
