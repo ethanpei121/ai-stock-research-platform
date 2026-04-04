@@ -45,7 +45,7 @@ async function parseError(response: Response): Promise<Error> {
 }
 
 async function request<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  const timeoutMs = init?.timeoutMs ?? 15_000;
+  const timeoutMs = init?.timeoutMs ?? 35_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -279,7 +279,7 @@ export async function getSummary(symbol: string, options?: SummaryOptions): Prom
   return normalizeSummary(
     await request<unknown>("/api/v1/summary", {
       method: "POST",
-      timeoutMs: 25_000,
+      timeoutMs: 50_000,
       body: JSON.stringify({
         symbol,
         fresh: options?.fresh ?? true,

@@ -1,5 +1,6 @@
 const FALLBACK_API_TARGET = "http://localhost:8000";
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
+const PROXY_TIMEOUT_MS = 30_000;
 
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? FALLBACK_API_TARGET).replace(/\/+$/, "");
 
@@ -26,10 +27,14 @@ export async function proxyBackend(path: string, init?: RequestInit): Promise<Re
     headers.set("Content-Type", "application/json");
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+
   try {
     const response = await fetch(buildBackendUrl(path), {
       ...init,
       headers,
+      signal: controller.signal,
       cache: "no-store",
     });
 
@@ -59,7 +64,12 @@ export async function proxyBackend(path: string, init?: RequestInit): Promise<Re
         "content-type": contentType,
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return buildProxyErrorResponse(504, "后端响应超时，数据源可能繁忙，请稍后重试。");
+    }
     return buildProxyErrorResponse(502, "后端服务暂时不可达，请稍后重试。");
+  } finally {
+    clearTimeout(timer);
   }
 }
