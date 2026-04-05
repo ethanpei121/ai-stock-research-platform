@@ -1,5 +1,6 @@
 export type LoadState = "idle" | "loading" | "success" | "error";
 export type RecommendationMode = "preset" | "live";
+export type ResearchStatus = "待研究" | "持续跟踪" | "观察结束";
 
 export type Quote = {
   symbol: string;
@@ -23,6 +24,59 @@ export type NewsResponse = {
   count: number;
   items: NewsItem[];
   providers: string[];
+};
+
+export type AnnouncementItem = {
+  title: string;
+  url: string;
+  published_at: string;
+  source: string;
+  category: string | null;
+};
+
+export type AnnouncementsResponse = {
+  symbol: string;
+  count: number;
+  items: AnnouncementItem[];
+  providers: string[];
+};
+
+export type FundamentalsResponse = {
+  symbol: string;
+  as_of: string;
+  providers: string[];
+  company_name: string | null;
+  industry: string | null;
+  listed_date: string | null;
+  market_cap: number | null;
+  float_market_cap: number | null;
+  pe_ratio: number | null;
+  pb_ratio: number | null;
+  roe: number | null;
+  gross_margin: number | null;
+  net_margin: number | null;
+  debt_to_asset: number | null;
+  revenue_growth: number | null;
+  net_profit_growth: number | null;
+  source_note: string | null;
+};
+
+export type CompareStockResponse = {
+  symbol: string;
+  company_name: string | null;
+  quote: Quote;
+  fundamentals: FundamentalsResponse | null;
+  news_count: number;
+  latest_news_time: string | null;
+  announcement_count: number;
+  latest_announcement_time: string | null;
+  highlights: string[];
+  data_sources: string[];
+};
+
+export type CompareResponse = {
+  generated_at: string;
+  items: CompareStockResponse[];
 };
 
 export type SummaryResponse = {
@@ -100,6 +154,35 @@ export type RecommendationsResponse = {
   methodology: string;
   data_sources: string[];
   groups: RecommendationGroup[];
+};
+
+export type WatchlistItem = {
+  symbol: string;
+  company_name: string;
+  market: string | null;
+  region: string | null;
+  tags: string[];
+  status: ResearchStatus;
+  added_at: string;
+  updated_at: string;
+};
+
+export type RecentViewedItem = {
+  symbol: string;
+  company_name: string;
+  viewed_at: string;
+};
+
+export type WatchlistResponse = {
+  client_id: string;
+  count: number;
+  items: WatchlistItem[];
+};
+
+export type RecentViewsResponse = {
+  client_id: string;
+  count: number;
+  items: RecentViewedItem[];
 };
 
 export type ApiErrorResponse = {

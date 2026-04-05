@@ -5,10 +5,42 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AnalysisDrawer } from "@/components/AnalysisDrawer";
+import { CompareWorkspace } from "@/components/CompareWorkspace";
+import { ResearchWorkspace } from "@/components/ResearchWorkspace";
 import { RecommendationsWorkspace } from "@/components/RecommendationsWorkspace";
-import { getQuote, getRecommendations } from "@/lib/api";
+import {
+  deleteWatchlistItem,
+  getCompare,
+  getQuote,
+  getRecentViews,
+  getRecommendations,
+  getWatchlist,
+  saveRecentView,
+  saveWatchlistItem,
+} from "@/lib/api";
 import { DEFAULT_RECOMMENDATIONS } from "@/lib/default-recommendations";
-import type { AsyncSection, Quote, RecommendationsResponse } from "@/lib/types";
+import {
+  getOrCreateClientId,
+  loadRecentViews,
+  loadWatchlist,
+  mergeRecentViews,
+  mergeWatchlists,
+  removeWatchlistItem as removeWatchlistItemLocal,
+  saveRecentViews,
+  saveWatchlist,
+  setWatchlistStatus,
+  upsertRecentViewedItem,
+  upsertWatchlistItem,
+} from "@/lib/research-tracker";
+import type {
+  AsyncSection,
+  CompareResponse,
+  Quote,
+  RecentViewedItem,
+  RecommendationsResponse,
+  ResearchStatus,
+  WatchlistItem,
+} from "@/lib/types";
 
 const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSection<T> => ({
   status,
@@ -18,16 +50,36 @@ const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSec
 
 type RecommendationQuoteMap = Record<string, AsyncSection<Quote>>;
 const RECOMMENDATION_QUOTE_CONCURRENCY = 4;
+const MAX_COMPARE_SYMBOLS = 4;
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
+}
+
+function normalizeSymbol(symbol: string): string {
+  return symbol.trim().toUpperCase();
+}
+
+function parseCompareSymbols(rawValue: string | null): string[] {
+  if (!rawValue) {
+    return [];
+  }
+
+  const values = rawValue
+    .split(",")
+    .map((item) => normalizeSymbol(item))
+    .filter(Boolean);
+
+  return Array.from(new Set(values)).slice(0, MAX_COMPARE_SYMBOLS);
 }
 
 function buildQuoteHydrationSymbols(
   data: RecommendationsResponse,
   selectedCategory: string,
   selectedStyle: string,
-  activeSymbol: string
+  activeSymbol: string,
+  watchlist: WatchlistItem[],
+  recentViews: RecentViewedItem[]
 ): string[] {
   const symbols: string[] = [];
 
@@ -46,6 +98,14 @@ function buildQuoteHydrationSymbols(
       }
       symbols.push(stock.symbol.toUpperCase());
     }
+  }
+
+  for (const item of watchlist) {
+    symbols.push(item.symbol.toUpperCase());
+  }
+
+  for (const item of recentViews) {
+    symbols.push(item.symbol.toUpperCase());
   }
 
   return Array.from(new Set(symbols));
@@ -72,7 +132,6 @@ async function hydrateQuotesWithConcurrency(
   );
 }
 
-
 export function HomePageClient() {
   const router = useRouter();
   const pathname = usePathname();
@@ -89,7 +148,16 @@ export function HomePageClient() {
   const [recommendationQuoteSnapshots, setRecommendationQuoteSnapshots] = useState<RecommendationQuoteMap>({});
   const recommendationQuoteSnapshotsRef = useRef<RecommendationQuoteMap>({});
 
-  const activeSymbol = (searchParams.get("symbol") ?? "").trim().toUpperCase();
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [recentViews, setRecentViews] = useState<RecentViewedItem[]>([]);
+  const [researchClientId, setResearchClientId] = useState<string | null>(null);
+  const [isResearchTrackerReady, setIsResearchTrackerReady] = useState(false);
+
+  const [compareSection, setCompareSection] = useState<AsyncSection<CompareResponse>>(createSection());
+  const [isCompareRefreshing, setIsCompareRefreshing] = useState(false);
+
+  const activeSymbol = normalizeSymbol(searchParams.get("symbol") ?? "");
+  const compareSymbols = parseCompareSymbols(searchParams.get("compare"));
   const isPanelOpen = activeSymbol.length > 0;
 
   const data = recommendationSection.status === "success" ? recommendationSection.data : null;
@@ -105,9 +173,81 @@ export function HomePageClient() {
     }
   }
 
+  if (!activeCompanyName) {
+    activeCompanyName =
+      watchlist.find((item) => item.symbol === activeSymbol)?.company_name ??
+      recentViews.find((item) => item.symbol === activeSymbol)?.company_name ??
+      compareSection.data?.items.find((item) => item.symbol === activeSymbol)?.company_name ??
+      null;
+  }
+
+  const activeWatchlistItem = watchlist.find((item) => item.symbol === activeSymbol) ?? null;
+  const activeCompareState = activeSymbol ? compareSymbols.includes(activeSymbol) : false;
+
   useEffect(() => {
     recommendationQuoteSnapshotsRef.current = recommendationQuoteSnapshots;
   }, [recommendationQuoteSnapshots]);
+
+  useEffect(() => {
+    const localWatchlist = loadWatchlist();
+    const localRecentViews = loadRecentViews();
+    const clientId = getOrCreateClientId();
+
+    setWatchlist(localWatchlist);
+    setRecentViews(localRecentViews);
+    setResearchClientId(clientId);
+    setIsResearchTrackerReady(true);
+
+    if (!clientId) {
+      return;
+    }
+
+    void Promise.allSettled([getWatchlist(clientId), getRecentViews(clientId)]).then(([watchlistResult, recentResult]) => {
+      if (watchlistResult.status === "fulfilled") {
+        setWatchlist((current) => mergeWatchlists(current, watchlistResult.value.items));
+      }
+      if (recentResult.status === "fulfilled") {
+        setRecentViews((current) => mergeRecentViews(current, recentResult.value.items));
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isResearchTrackerReady) {
+      return;
+    }
+    saveWatchlist(watchlist);
+  }, [isResearchTrackerReady, watchlist]);
+
+  useEffect(() => {
+    if (!isResearchTrackerReady) {
+      return;
+    }
+    saveRecentViews(recentViews);
+  }, [isResearchTrackerReady, recentViews]);
+
+  useEffect(() => {
+    if (!activeSymbol || !isPanelOpen || !isResearchTrackerReady) {
+      return;
+    }
+
+    setRecentViews((current) =>
+      upsertRecentViewedItem(current, {
+        symbol: activeSymbol,
+        company_name: activeCompanyName ?? activeSymbol,
+      })
+    );
+
+    if (researchClientId) {
+      void saveRecentView({
+        clientId: researchClientId,
+        symbol: activeSymbol,
+        companyName: activeCompanyName ?? activeSymbol,
+      }).catch(() => {
+        // Keep local history even if cloud sync is temporarily unavailable.
+      });
+    }
+  }, [activeCompanyName, activeSymbol, isPanelOpen, isResearchTrackerReady, researchClientId]);
 
   useEffect(() => {
     if (!data) {
@@ -118,7 +258,9 @@ export function HomePageClient() {
       data,
       selectedRecommendationCategory,
       selectedRecommendationStyle,
-      activeSymbol
+      activeSymbol,
+      watchlist,
+      recentViews
     );
 
     if (symbols.length === 0) {
@@ -168,19 +310,97 @@ export function HomePageClient() {
     return () => {
       cancelled = true;
     };
-  }, [activeSymbol, data, selectedRecommendationCategory, selectedRecommendationStyle]);
+  }, [activeSymbol, data, recentViews, selectedRecommendationCategory, selectedRecommendationStyle, watchlist]);
 
-  const updateDrawerSymbol = (symbol: string | null) => {
-    const params = new URLSearchParams(searchParams.toString());
-
-    if (symbol) {
-      params.set("symbol", symbol.trim().toUpperCase());
-    } else {
-      params.delete("symbol");
+  useEffect(() => {
+    if (compareSymbols.length < 2) {
+      setCompareSection(createSection());
+      return;
     }
 
+    let cancelled = false;
+    setCompareSection(createSection("loading"));
+
+    void getCompare(compareSymbols)
+      .then((response) => {
+        if (!cancelled) {
+          setCompareSection({ status: "success", data: response, error: null });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCompareSection({ status: "error", data: null, error: toErrorMessage(error) });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [compareSymbols]);
+
+  const updateRouteParams = (updater: (params: URLSearchParams) => void) => {
+    const params = new URLSearchParams(searchParams.toString());
+    updater(params);
     const query = params.toString();
     router.push(query ? `${pathname}?${query}` : pathname);
+  };
+
+  const updateDrawerSymbol = (symbol: string | null) => {
+    updateRouteParams((params) => {
+      if (symbol) {
+        params.set("symbol", normalizeSymbol(symbol));
+      } else {
+        params.delete("symbol");
+      }
+    });
+  };
+
+  const updateCompareSymbols = (symbols: string[]) => {
+    updateRouteParams((params) => {
+      const normalized = Array.from(new Set(symbols.map((item) => normalizeSymbol(item)).filter(Boolean))).slice(
+        0,
+        MAX_COMPARE_SYMBOLS
+      );
+      if (normalized.length > 0) {
+        params.set("compare", normalized.join(","));
+      } else {
+        params.delete("compare");
+      }
+    });
+  };
+
+  const toggleCompareSymbol = (symbol: string) => {
+    const normalized = normalizeSymbol(symbol);
+    if (!normalized) {
+      return;
+    }
+
+    if (compareSymbols.includes(normalized)) {
+      updateCompareSymbols(compareSymbols.filter((item) => item !== normalized));
+      return;
+    }
+
+    updateCompareSymbols([...compareSymbols, normalized].slice(-MAX_COMPARE_SYMBOLS));
+  };
+
+  const clearCompareSymbols = () => {
+    updateCompareSymbols([]);
+  };
+
+  const refreshCompare = async () => {
+    if (compareSymbols.length < 2) {
+      return;
+    }
+
+    setIsCompareRefreshing(true);
+    try {
+      const response = await getCompare(compareSymbols, { fresh: true });
+      setCompareSection({ status: "success", data: response, error: null });
+    } catch (error) {
+      setCompareSection({ status: "error", data: null, error: toErrorMessage(error) });
+    } finally {
+      setIsCompareRefreshing(false);
+    }
   };
 
   const refreshRecommendations = async () => {
@@ -209,6 +429,74 @@ export function HomePageClient() {
     }
   };
 
+  const toggleWatchlist = (input: {
+    symbol: string;
+    company_name?: string | null;
+    market?: string | null;
+    region?: string | null;
+    tags?: string[] | null;
+  }) => {
+    setWatchlist((current) => {
+      const normalizedSymbol = normalizeSymbol(input.symbol);
+      const existing = current.find((item) => item.symbol === normalizedSymbol);
+
+      if (existing) {
+        if (researchClientId) {
+          void deleteWatchlistItem(researchClientId, normalizedSymbol).catch(() => {
+            // Keep local state if cloud sync fails.
+          });
+        }
+        return removeWatchlistItemLocal(current, normalizedSymbol);
+      }
+
+      const next = upsertWatchlistItem(current, input);
+      if (researchClientId) {
+        void saveWatchlistItem({
+          clientId: researchClientId,
+          symbol: normalizedSymbol,
+          companyName: input.company_name ?? normalizedSymbol,
+          market: input.market ?? undefined,
+          region: input.region ?? undefined,
+          tags: input.tags ?? [],
+          status: "待研究",
+        }).catch(() => {
+          // Keep local state if cloud sync fails.
+        });
+      }
+      return next;
+    });
+  };
+
+  const removeFromWatchlist = (symbol: string) => {
+    setWatchlist((current) => removeWatchlistItemLocal(current, symbol));
+    if (researchClientId) {
+      void deleteWatchlistItem(researchClientId, symbol).catch(() => {
+        // Keep local state if cloud sync fails.
+      });
+    }
+  };
+
+  const updateWatchlistStatus = (symbol: string, status: ResearchStatus) => {
+    setWatchlist((current) => {
+      const next = setWatchlistStatus(current, symbol, status);
+      const updatedItem = next.find((item) => item.symbol === normalizeSymbol(symbol));
+      if (researchClientId && updatedItem) {
+        void saveWatchlistItem({
+          clientId: researchClientId,
+          symbol: updatedItem.symbol,
+          companyName: updatedItem.company_name,
+          market: updatedItem.market ?? undefined,
+          region: updatedItem.region ?? undefined,
+          tags: updatedItem.tags,
+          status: updatedItem.status,
+        }).catch(() => {
+          // Keep local state if cloud sync fails.
+        });
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-warning-border bg-warning-bg/70 px-4 py-3 shadow-sm backdrop-blur-sm">
@@ -232,12 +520,32 @@ export function HomePageClient() {
             : "xl:grid-cols-1"
         }`}
       >
-        {/* Left: Recommendations */}
         <div
           className={`space-y-4 transition-[max-width] duration-300 xl:h-full xl:overflow-y-auto xl:pr-2 ${
             isPanelOpen ? "" : "mx-auto w-full max-w-6xl"
           }`}
         >
+          <ResearchWorkspace
+            watchlist={watchlist}
+            recentViews={recentViews}
+            quoteSnapshots={recommendationQuoteSnapshots}
+            activeSymbol={activeSymbol}
+            onOpenSymbol={updateDrawerSymbol}
+            onToggleWatchlist={toggleWatchlist}
+            onRemoveWatchlist={removeFromWatchlist}
+            onStatusChange={updateWatchlistStatus}
+          />
+
+          <CompareWorkspace
+            section={compareSection}
+            selectedSymbols={compareSymbols}
+            onOpenSymbol={updateDrawerSymbol}
+            onRemoveSymbol={toggleCompareSymbol}
+            onClear={clearCompareSymbols}
+            onRefresh={refreshCompare}
+            isRefreshing={isCompareRefreshing}
+          />
+
           <RecommendationsWorkspace
             section={recommendationSection}
             quoteSnapshots={recommendationQuoteSnapshots}
@@ -246,6 +554,10 @@ export function HomePageClient() {
             selectedStyle={selectedRecommendationStyle}
             isRefreshing={isRecommendationRefreshing}
             refreshError={recommendationRefreshError}
+            watchlistSymbols={watchlist.map((item) => item.symbol)}
+            compareSymbols={compareSymbols}
+            onToggleWatchlist={toggleWatchlist}
+            onToggleCompare={toggleCompareSymbol}
             onCategoryChange={setSelectedRecommendationCategory}
             onStyleChange={setSelectedRecommendationStyle}
             onOpenSymbol={updateDrawerSymbol}
@@ -253,10 +565,21 @@ export function HomePageClient() {
           />
         </div>
 
-        {/* Right: Analysis drawer */}
         <AnalysisDrawer
           symbol={activeSymbol || null}
           companyName={activeCompanyName}
+          isWatchlisted={Boolean(activeWatchlistItem)}
+          onToggleWatchlist={
+            activeSymbol
+              ? () =>
+                  toggleWatchlist({
+                    symbol: activeSymbol,
+                    company_name: activeCompanyName ?? activeSymbol,
+                  })
+              : undefined
+          }
+          isCompared={activeCompareState}
+          onToggleCompare={activeSymbol ? () => toggleCompareSymbol(activeSymbol) : undefined}
           open={isPanelOpen}
           onClose={() => updateDrawerSymbol(null)}
         />

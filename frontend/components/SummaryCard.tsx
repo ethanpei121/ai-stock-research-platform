@@ -1,7 +1,7 @@
 import { ChevronDown, Lightbulb, Loader2, MapPinned, RefreshCw, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 
-import { formatDateTime } from "@/lib/formatters";
+import { formatDateTime, formatRelativeTime } from "@/lib/formatters";
 import type { AsyncSection, SummaryResponse } from "@/lib/types";
 
 type SummaryCardProps = {
@@ -56,6 +56,11 @@ export function SummaryCard({ section, isRefreshing = false, onRefresh }: Summar
 
   const { meta } = section.data;
   const isFallback = meta?.is_fallback ?? true;
+  const summaryMetaPills = [
+    meta?.quote_market_time ? `行情 ${formatRelativeTime(meta.quote_market_time)}` : null,
+    meta?.latest_news_time ? `新闻 ${formatRelativeTime(meta.latest_news_time)}` : "新闻 暂无更新",
+    meta?.force_refresh_used ? "已绕过缓存" : "允许缓存",
+  ].filter((item): item is string => Boolean(item));
 
   return (
     <div className="terminal-card overflow-hidden">
@@ -87,6 +92,16 @@ export function SummaryCard({ section, isRefreshing = false, onRefresh }: Summar
       </div>
 
       <div className="space-y-3 p-4">
+        {summaryMetaPills.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {summaryMetaPills.map((item) => (
+              <span key={item} className="terminal-pill-default text-[10px]">
+                {item}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         {/* Bullish */}
         {section.data.summary.bullish.length > 0 && (
           <div className="rounded-xl border border-gain-border bg-gain-bg/50 px-3.5 py-3">

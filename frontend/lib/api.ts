@@ -1,12 +1,21 @@
 import type {
+  CompareResponse,
+  CompareStockResponse,
+  AnnouncementsResponse,
   ApiErrorResponse,
+  FundamentalsResponse,
   NewsResponse,
   Quote,
+  RecentViewedItem,
+  RecentViewsResponse,
   RecommendationEvidence,
   RecommendationGroup,
   RecommendationScorecard,
   RecommendationsResponse,
+  ResearchStatus,
   SummaryResponse,
+  WatchlistItem,
+  WatchlistResponse,
 } from "@/lib/types";
 
 export const API_TARGET = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000").replace(/\/+$/, "");
@@ -146,6 +155,129 @@ function normalizeNews(payload: unknown): NewsResponse {
   };
 }
 
+function normalizeAnnouncements(payload: unknown): AnnouncementsResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const items = Array.isArray(data.items)
+    ? data.items.map((item) => {
+        const record = (item ?? {}) as Record<string, unknown>;
+        return {
+          title: asString(record.title, "Untitled"),
+          url: asString(record.url, "#"),
+          published_at: asString(record.published_at, new Date().toISOString()),
+          source: asString(record.source, "Unknown"),
+          category: asNullableString(record.category),
+        };
+      })
+    : [];
+
+  return {
+    symbol: asString(data.symbol),
+    count: typeof data.count === "number" ? data.count : items.length,
+    items,
+    providers: asStringArray(data.providers),
+  };
+}
+
+function normalizeFundamentals(payload: unknown): FundamentalsResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+
+  return {
+    symbol: asString(data.symbol),
+    as_of: asString(data.as_of, new Date().toISOString()),
+    providers: asStringArray(data.providers),
+    company_name: asNullableString(data.company_name),
+    industry: asNullableString(data.industry),
+    listed_date: asNullableString(data.listed_date),
+    market_cap: asNullableNumber(data.market_cap),
+    float_market_cap: asNullableNumber(data.float_market_cap),
+    pe_ratio: asNullableNumber(data.pe_ratio),
+    pb_ratio: asNullableNumber(data.pb_ratio),
+    roe: asNullableNumber(data.roe),
+    gross_margin: asNullableNumber(data.gross_margin),
+    net_margin: asNullableNumber(data.net_margin),
+    debt_to_asset: asNullableNumber(data.debt_to_asset),
+    revenue_growth: asNullableNumber(data.revenue_growth),
+    net_profit_growth: asNullableNumber(data.net_profit_growth),
+    source_note: asNullableString(data.source_note),
+  };
+}
+
+function normalizeWatchlistItem(payload: unknown): WatchlistItem {
+  const data = (payload ?? {}) as Record<string, unknown>;
+
+  return {
+    symbol: asString(data.symbol),
+    company_name: asString(data.company_name, asString(data.symbol)),
+    market: asNullableString(data.market),
+    region: asNullableString(data.region),
+    tags: asStringArray(data.tags),
+    status:
+      data.status === "持续跟踪" || data.status === "观察结束"
+        ? data.status
+        : "待研究",
+    added_at: asString(data.added_at, new Date().toISOString()),
+    updated_at: asString(data.updated_at, new Date().toISOString()),
+  };
+}
+
+function normalizeWatchlist(payload: unknown): WatchlistResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const items = Array.isArray(data.items) ? data.items.map(normalizeWatchlistItem) : [];
+
+  return {
+    client_id: asString(data.client_id),
+    count: typeof data.count === "number" ? data.count : items.length,
+    items,
+  };
+}
+
+function normalizeRecentViewedItem(payload: unknown): RecentViewedItem {
+  const data = (payload ?? {}) as Record<string, unknown>;
+
+  return {
+    symbol: asString(data.symbol),
+    company_name: asString(data.company_name, asString(data.symbol)),
+    viewed_at: asString(data.viewed_at, new Date().toISOString()),
+  };
+}
+
+function normalizeRecentViews(payload: unknown): RecentViewsResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+  const items = Array.isArray(data.items) ? data.items.map(normalizeRecentViewedItem) : [];
+
+  return {
+    client_id: asString(data.client_id),
+    count: typeof data.count === "number" ? data.count : items.length,
+    items,
+  };
+}
+
+function normalizeCompareStock(payload: unknown): CompareStockResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+
+  return {
+    symbol: asString(data.symbol),
+    company_name: asNullableString(data.company_name),
+    quote: normalizeQuote(data.quote),
+    fundamentals: data.fundamentals ? normalizeFundamentals(data.fundamentals) : null,
+    news_count: asNumber(data.news_count),
+    latest_news_time: asNullableString(data.latest_news_time),
+    announcement_count: asNumber(data.announcement_count),
+    latest_announcement_time: asNullableString(data.latest_announcement_time),
+    highlights: asStringArray(data.highlights),
+    data_sources: asStringArray(data.data_sources),
+  };
+}
+
+function normalizeCompare(payload: unknown): CompareResponse {
+  const data = (payload ?? {}) as Record<string, unknown>;
+
+  return {
+    generated_at: asString(data.generated_at, new Date().toISOString()),
+    items: Array.isArray(data.items) ? data.items.map(normalizeCompareStock) : [],
+  };
+}
+
 function normalizeSummary(payload: unknown): SummaryResponse {
   const data = (payload ?? {}) as Record<string, unknown>;
   const summary = (data.summary ?? {}) as Record<string, unknown>;
@@ -275,6 +407,105 @@ export async function getQuote(symbol: string, options?: FreshOptions): Promise<
 export async function getNews(symbol: string, limit = 5, options?: FreshOptions): Promise<NewsResponse> {
   const fresh = options?.fresh ? "&fresh=true" : "";
   return normalizeNews(await request<unknown>(`/api/v1/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}${fresh}`));
+}
+
+export async function getFundamentals(symbol: string): Promise<FundamentalsResponse> {
+  return normalizeFundamentals(
+    await request<unknown>(`/api/v1/fundamentals?symbol=${encodeURIComponent(symbol)}`, {
+      timeoutMs: 45_000,
+    })
+  );
+}
+
+export async function getAnnouncements(symbol: string, limit = 5): Promise<AnnouncementsResponse> {
+  return normalizeAnnouncements(
+    await request<unknown>(`/api/v1/announcements?symbol=${encodeURIComponent(symbol)}&limit=${limit}`, {
+      timeoutMs: 45_000,
+    })
+  );
+}
+
+export async function getCompare(symbols: string[], options?: FreshOptions): Promise<CompareResponse> {
+  return normalizeCompare(
+    await request<unknown>("/api/v1/compare", {
+      method: "POST",
+      timeoutMs: 65_000,
+      body: JSON.stringify({
+        symbols,
+        fresh: options?.fresh ?? false,
+      }),
+    })
+  );
+}
+
+export async function getWatchlist(clientId: string): Promise<WatchlistResponse> {
+  return normalizeWatchlist(
+    await request<unknown>(`/api/v1/watchlist?client_id=${encodeURIComponent(clientId)}`, {
+      timeoutMs: 35_000,
+    })
+  );
+}
+
+export async function saveWatchlistItem(input: {
+  clientId: string;
+  symbol: string;
+  companyName?: string | null;
+  market?: string | null;
+  region?: string | null;
+  tags?: string[];
+  status?: ResearchStatus;
+}): Promise<WatchlistItem> {
+  return normalizeWatchlistItem(
+    await request<unknown>("/api/v1/watchlist", {
+      method: "POST",
+      timeoutMs: 35_000,
+      body: JSON.stringify({
+        client_id: input.clientId,
+        symbol: input.symbol,
+        company_name: input.companyName ?? undefined,
+        market: input.market ?? undefined,
+        region: input.region ?? undefined,
+        tags: input.tags ?? [],
+        status: input.status ?? "待研究",
+      }),
+    })
+  );
+}
+
+export async function deleteWatchlistItem(clientId: string, symbol: string): Promise<void> {
+  await request<unknown>(
+    `/api/v1/watchlist/${encodeURIComponent(symbol)}?client_id=${encodeURIComponent(clientId)}`,
+    {
+      method: "DELETE",
+      timeoutMs: 35_000,
+    }
+  );
+}
+
+export async function getRecentViews(clientId: string): Promise<RecentViewsResponse> {
+  return normalizeRecentViews(
+    await request<unknown>(`/api/v1/recent-views?client_id=${encodeURIComponent(clientId)}`, {
+      timeoutMs: 35_000,
+    })
+  );
+}
+
+export async function saveRecentView(input: {
+  clientId: string;
+  symbol: string;
+  companyName?: string | null;
+}): Promise<RecentViewedItem> {
+  return normalizeRecentViewedItem(
+    await request<unknown>("/api/v1/recent-views", {
+      method: "POST",
+      timeoutMs: 35_000,
+      body: JSON.stringify({
+        client_id: input.clientId,
+        symbol: input.symbol,
+        company_name: input.companyName ?? undefined,
+      }),
+    })
+  );
 }
 
 export async function getSummary(symbol: string, options?: SummaryOptions): Promise<SummaryResponse> {

@@ -54,7 +54,7 @@ export function QuoteCard({ symbol, section }: QuoteCardProps) {
         <div>
           <div className="terminal-label flex items-center gap-1.5">
             <TrendingUp className="h-3 w-3" />
-            实时行情
+            行情概览
           </div>
           <div className="mt-2 flex items-baseline gap-3">
             <span className="font-mono text-3xl font-bold tracking-tight text-terminal-text">

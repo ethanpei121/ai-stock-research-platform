@@ -6,6 +6,7 @@ from app.api.v1.health import public_router as health_public_router
 from app.api.v1.market import router as market_router
 from app.core.config import get_settings
 from app.core.errors import install_exception_handlers
+from app.db.session import init_db_schema
 
 
 def create_app() -> FastAPI:
@@ -17,6 +18,7 @@ def create_app() -> FastAPI:
     )
 
     install_exception_handlers(app)
+    init_db_schema()
 
     if settings.cors_allow_origins:
         app.add_middleware(

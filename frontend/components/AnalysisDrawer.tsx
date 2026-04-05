@@ -1,17 +1,37 @@
 "use client";
 
-import { CheckCircle2, LineChart, Loader2, Newspaper, Sparkles, X } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, DatabaseZap, FileText, LineChart, Loader2, Newspaper, Sparkles, Star, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { AnnouncementsCard } from "@/components/AnnouncementsCard";
+import { FundamentalsCard } from "@/components/FundamentalsCard";
 import { NewsList } from "@/components/NewsList";
 import { QuoteCard } from "@/components/QuoteCard";
 import { SummaryCard } from "@/components/SummaryCard";
-import { getNews, getQuote, getSummary } from "@/lib/api";
-import type { AsyncSection, NewsResponse, Quote, SummaryResponse } from "@/lib/types";
+import {
+  getAnnouncements,
+  getFundamentals,
+  getNews,
+  getQuote,
+  getSummary,
+} from "@/lib/api";
+import { formatRelativeTime } from "@/lib/formatters";
+import type {
+  AnnouncementsResponse,
+  AsyncSection,
+  FundamentalsResponse,
+  NewsResponse,
+  Quote,
+  SummaryResponse,
+} from "@/lib/types";
 
 type AnalysisDrawerProps = {
   symbol: string | null;
   companyName?: string | null;
+  isWatchlisted?: boolean;
+  onToggleWatchlist?: () => void;
+  isCompared?: boolean;
+  onToggleCompare?: () => void;
   open: boolean;
   onClose: () => void;
 };
@@ -33,6 +53,11 @@ const createSection = <T,>(status: AsyncSection<T>["status"] = "idle"): AsyncSec
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
+}
+
+function isAnnouncementSupported(symbol: string): boolean {
+  const normalized = symbol.trim().toUpperCase();
+  return /^\d{6}$/.test(normalized) || normalized.endsWith(".SZ") || normalized.endsWith(".SS") || normalized.endsWith(".BJ");
 }
 
 function getStepState<T>(section: AsyncSection<T>): StepState {
@@ -100,23 +125,157 @@ function buildSummaryPrerequisiteError(quoteError: string | null, newsError: str
   return "前置数据未准备完成。";
 }
 
+function AnalysisStatusStrip({
+  quoteSection,
+  newsSection,
+  summarySection,
+  fundamentalsSection,
+  announcementsSection,
+  supportsAnnouncements,
+}: {
+  quoteSection: AsyncSection<Quote>;
+  newsSection: AsyncSection<NewsResponse>;
+  summarySection: AsyncSection<SummaryResponse>;
+  fundamentalsSection: AsyncSection<FundamentalsResponse>;
+  announcementsSection: AsyncSection<AnnouncementsResponse>;
+  supportsAnnouncements: boolean;
+}) {
+  const summaryMeta = summarySection.status === "success" ? summarySection.data?.meta : null;
+  const statusItems = [
+    quoteSection.status === "success" && quoteSection.data?.market_time
+      ? {
+          label: "行情",
+          value: formatRelativeTime(quoteSection.data.market_time),
+          tone: "default",
+        }
+      : null,
+    newsSection.status === "success" && summaryMeta?.latest_news_time
+      ? {
+          label: "新闻",
+          value: formatRelativeTime(summaryMeta.latest_news_time),
+          tone: "default",
+        }
+      : null,
+    summarySection.status === "success"
+      ? {
+          label: "AI",
+          value: summarySection.data?.meta.is_fallback ? "模板回退" : "模型生成",
+          tone: summarySection.data?.meta.is_fallback ? "warning" : "positive",
+        }
+      : null,
+    fundamentalsSection.status === "success"
+      ? {
+          label: "基本面",
+          value: "已同步",
+          tone: "accent",
+        }
+      : null,
+    supportsAnnouncements
+      ? announcementsSection.status === "success"
+        ? {
+            label: "公告",
+            value:
+              announcementsSection.data && announcementsSection.data.count > 0
+                ? `${announcementsSection.data.count} 条`
+                : "暂无",
+            tone: "accent",
+          }
+        : announcementsSection.status === "error"
+          ? {
+              label: "公告",
+              value: "未同步",
+              tone: "warning",
+            }
+          : null
+      : {
+          label: "公告",
+          value: "限 A 股",
+          tone: "default",
+        },
+  ].filter(
+    (
+      item
+    ): item is {
+      label: string;
+      value: string;
+      tone: "default" | "accent" | "positive" | "warning";
+    } => Boolean(item)
+  );
+
+  if (statusItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2 rounded-xl border border-terminal-border bg-terminal-card/50 px-3 py-2">
+      {statusItems.map((item) => {
+        const className =
+          item.tone === "accent"
+            ? "terminal-pill-accent"
+            : item.tone === "positive"
+              ? "terminal-pill-gain"
+              : item.tone === "warning"
+                ? "terminal-pill border border-warning-border bg-warning-bg text-warning"
+                : "terminal-pill-default";
+
+        return (
+          <span key={`${item.label}-${item.value}`} className={`${className} text-[10px]`}>
+            {item.label} · {item.value}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 
 function AnalysisSteps({
   quoteSection,
   newsSection,
   summarySection,
+  fundamentalsSection,
+  announcementsSection,
+  supportsAnnouncements,
 }: {
   quoteSection: AsyncSection<Quote>;
   newsSection: AsyncSection<NewsResponse>;
   summarySection: AsyncSection<SummaryResponse>;
+  fundamentalsSection: AsyncSection<FundamentalsResponse>;
+  announcementsSection: AsyncSection<AnnouncementsResponse>;
+  supportsAnnouncements: boolean;
 }) {
   const steps: StepDefinition[] = useMemo(
-    () => [
-      { id: "quote", label: "获取行情", icon: <LineChart className="h-3.5 w-3.5" />, state: getStepState(quoteSection) },
-      { id: "news", label: "拉取资讯", icon: <Newspaper className="h-3.5 w-3.5" />, state: getStepState(newsSection) },
-      { id: "summary", label: "AI 简报", icon: <Sparkles className="h-3.5 w-3.5" />, state: getStepState(summarySection) },
-    ],
-    [newsSection, quoteSection, summarySection]
+    () => {
+      const nextSteps: StepDefinition[] = [
+        { id: "quote", label: "获取行情", icon: <LineChart className="h-3.5 w-3.5" />, state: getStepState(quoteSection) },
+        { id: "news", label: "拉取资讯", icon: <Newspaper className="h-3.5 w-3.5" />, state: getStepState(newsSection) },
+        {
+          id: "fundamentals",
+          label: "同步财务",
+          icon: <DatabaseZap className="h-3.5 w-3.5" />,
+          state: getStepState(fundamentalsSection),
+        },
+      ];
+
+      if (supportsAnnouncements) {
+        nextSteps.push({
+          id: "announcements",
+          label: "同步公告",
+          icon: <FileText className="h-3.5 w-3.5" />,
+          state: getStepState(announcementsSection),
+        });
+      }
+
+      nextSteps.push({
+        id: "summary",
+        label: "AI 简报",
+        icon: <Sparkles className="h-3.5 w-3.5" />,
+        state: getStepState(summarySection),
+      });
+
+      return nextSteps;
+    },
+    [announcementsSection, fundamentalsSection, newsSection, quoteSection, summarySection, supportsAnnouncements]
   );
 
   return (
@@ -146,28 +305,74 @@ function AnalysisSteps({
 }
 
 
-export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisDrawerProps) {
+export function AnalysisDrawer({
+  symbol,
+  companyName,
+  isWatchlisted = false,
+  onToggleWatchlist,
+  isCompared = false,
+  onToggleCompare,
+  open,
+  onClose,
+}: AnalysisDrawerProps) {
   const [quoteSection, setQuoteSection] = useState<AsyncSection<Quote>>(createSection());
   const [newsSection, setNewsSection] = useState<AsyncSection<NewsResponse>>(createSection());
+  const [fundamentalsSection, setFundamentalsSection] = useState<AsyncSection<FundamentalsResponse>>(createSection());
+  const [announcementsSection, setAnnouncementsSection] = useState<AsyncSection<AnnouncementsResponse>>(createSection());
   const [summarySection, setSummarySection] = useState<AsyncSection<SummaryResponse>>(createSection());
   const [isSummaryRefreshing, setIsSummaryRefreshing] = useState(false);
+  const supportsAnnouncements = symbol ? isAnnouncementSupported(symbol) : false;
 
   useEffect(() => {
     if (!open || !symbol) return;
 
     let cancelled = false;
     const normalized = symbol.trim().toUpperCase();
+    const canLoadAnnouncements = isAnnouncementSupported(normalized);
 
     const run = async () => {
       setIsSummaryRefreshing(false);
       setQuoteSection(createSection("loading"));
       setNewsSection(createSection("loading"));
+      setFundamentalsSection(createSection("loading"));
+      setAnnouncementsSection(
+        canLoadAnnouncements
+          ? createSection("loading")
+          : { status: "success", data: { symbol: normalized, count: 0, items: [], providers: [] }, error: null }
+      );
       setSummarySection(createSection("loading"));
 
-      const [quoteResult, newsResult] = await Promise.allSettled([
-        getQuote(normalized),
-        getNews(normalized, 20),
-      ]);
+      const quotePromise = getQuote(normalized);
+      const newsPromise = getNews(normalized, 20);
+      const fundamentalsPromise = getFundamentals(normalized);
+
+      void fundamentalsPromise
+        .then((fundamentals) => {
+          if (!cancelled) {
+            setFundamentalsSection({ status: "success", data: fundamentals, error: null });
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setFundamentalsSection({ status: "error", data: null, error: toErrorMessage(error) });
+          }
+        });
+
+      if (canLoadAnnouncements) {
+        void getAnnouncements(normalized, 5)
+          .then((announcements) => {
+            if (!cancelled) {
+              setAnnouncementsSection({ status: "success", data: announcements, error: null });
+            }
+          })
+          .catch((error) => {
+            if (!cancelled) {
+              setAnnouncementsSection({ status: "error", data: null, error: toErrorMessage(error) });
+            }
+          });
+      }
+
+      const [quoteResult, newsResult] = await Promise.allSettled([quotePromise, newsPromise]);
 
       if (cancelled) return;
 
@@ -217,7 +422,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
             fresh: false,
             quote: resolvedQuote,
             news: resolvedNews,
-            includeSupplemental: false,
+            includeSupplemental: true,
           });
           if (!cancelled) {
             setSummarySection({ status: "success", data: aiSummary, error: null });
@@ -262,7 +467,7 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
         fresh: true,
         quote: quoteSection.data,
         news: newsSection.data,
-        includeSupplemental: false,
+        includeSupplemental: true,
       });
       setSummarySection({ status: "success", data: refreshedSummary, error: null });
     } catch {
@@ -275,6 +480,8 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
   const isLoading =
     quoteSection.status === "loading" ||
     newsSection.status === "loading" ||
+    fundamentalsSection.status === "loading" ||
+    announcementsSection.status === "loading" ||
     summarySection.status === "loading";
 
   const panelContent = (
@@ -288,14 +495,46 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
             <p className="truncate text-sm text-terminal-muted">{companyName ?? ""}</p>
           </div>
         </div>
-        <button
-          type="button"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-terminal-border text-terminal-muted transition hover:border-terminal-border-hover hover:text-terminal-text"
-          onClick={onClose}
-          aria-label="关闭分析面板"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {symbol && onToggleCompare ? (
+            <button
+              type="button"
+              className={`flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs transition ${
+                isCompared
+                  ? "border-accent/30 bg-accent-muted text-accent-light"
+                  : "border-terminal-border text-terminal-muted hover:border-terminal-border-hover hover:text-terminal-text"
+              }`}
+              onClick={onToggleCompare}
+              aria-label={isCompared ? `从对比中移除 ${symbol}` : `加入对比 ${symbol}`}
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+              <span>{isCompared ? "已对比" : "加入对比"}</span>
+            </button>
+          ) : null}
+          {symbol && onToggleWatchlist ? (
+            <button
+              type="button"
+              className={`flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs transition ${
+                isWatchlisted
+                  ? "border-accent/30 bg-accent-muted text-accent-light"
+                  : "border-terminal-border text-terminal-muted hover:border-terminal-border-hover hover:text-terminal-text"
+              }`}
+              onClick={onToggleWatchlist}
+              aria-label={isWatchlisted ? `从研究清单移除 ${symbol}` : `加入研究清单 ${symbol}`}
+            >
+              <Star className={`h-3.5 w-3.5 ${isWatchlisted ? "fill-current" : ""}`} />
+              <span>{isWatchlisted ? "已收藏" : "加入清单"}</span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-terminal-border text-terminal-muted transition hover:border-terminal-border-hover hover:text-terminal-text"
+            onClick={onClose}
+            aria-label="关闭分析面板"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -305,8 +544,19 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
             quoteSection={quoteSection}
             newsSection={newsSection}
             summarySection={summarySection}
+            fundamentalsSection={fundamentalsSection}
+            announcementsSection={announcementsSection}
+            supportsAnnouncements={supportsAnnouncements}
           />
         ) : null}
+        <AnalysisStatusStrip
+          quoteSection={quoteSection}
+          newsSection={newsSection}
+          summarySection={summarySection}
+          fundamentalsSection={fundamentalsSection}
+          announcementsSection={announcementsSection}
+          supportsAnnouncements={supportsAnnouncements}
+        />
         <QuoteCard symbol={symbol} section={quoteSection} />
         <SummaryCard
           section={summarySection}
@@ -314,6 +564,11 @@ export function AnalysisDrawer({ symbol, companyName, open, onClose }: AnalysisD
           onRefresh={
             quoteSection.status === "success" && newsSection.status === "success" ? refreshAiSummary : undefined
           }
+        />
+        <FundamentalsCard section={fundamentalsSection} />
+        <AnnouncementsCard
+          section={announcementsSection}
+          emptyMessage={supportsAnnouncements ? "近期暂无可展示的公告披露。" : "当前标的暂未接入公告披露数据。"}
         />
         <NewsList section={newsSection} />
       </div>

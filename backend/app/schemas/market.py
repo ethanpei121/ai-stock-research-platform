@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -183,3 +184,98 @@ class RecommendationsResponse(BaseModel):
     methodology: str
     data_sources: list[str] = Field(default_factory=list)
     groups: list[RecommendationGroup]
+
+
+class CompareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbols: list[str] = Field(..., min_length=2, max_length=4)
+    fresh: bool = False
+
+
+class CompareStockResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    company_name: str | None = None
+    quote: QuoteResponse
+    fundamentals: FundamentalsResponse | None = None
+    news_count: int = 0
+    latest_news_time: datetime | None = None
+    announcement_count: int = 0
+    latest_announcement_time: datetime | None = None
+    highlights: list[str] = Field(default_factory=list)
+    data_sources: list[str] = Field(default_factory=list)
+
+
+class CompareResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    generated_at: datetime
+    items: list[CompareStockResponse]
+
+
+ResearchStatus = Literal["待研究", "持续跟踪", "观察结束"]
+
+
+class WatchlistItemPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: str = Field(..., min_length=1, max_length=128)
+    symbol: str = Field(..., min_length=1, max_length=16)
+    company_name: str | None = Field(default=None, max_length=255)
+    market: str | None = Field(default=None, max_length=64)
+    region: str | None = Field(default=None, max_length=64)
+    tags: list[str] = Field(default_factory=list)
+    status: ResearchStatus = "待研究"
+
+
+class WatchlistItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    company_name: str
+    market: str | None = None
+    region: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    status: ResearchStatus
+    added_at: datetime
+    updated_at: datetime
+
+
+class WatchlistResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: str
+    count: int
+    items: list[WatchlistItemResponse]
+
+
+class RecentViewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: str = Field(..., min_length=1, max_length=128)
+    symbol: str = Field(..., min_length=1, max_length=16)
+    company_name: str | None = Field(default=None, max_length=255)
+
+
+class RecentViewItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    company_name: str
+    viewed_at: datetime
+
+
+class RecentViewsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client_id: str
+    count: int
+    items: list[RecentViewItemResponse]
+
+
+class ActionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
