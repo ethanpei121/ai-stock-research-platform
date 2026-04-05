@@ -136,6 +136,9 @@ export function HomePageClient() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const urlActiveSymbol = normalizeSymbol(searchParams.get("symbol") ?? "");
+  const rawCompareParam = searchParams.get("compare");
+  const urlCompareSymbols = parseCompareSymbols(rawCompareParam);
   const [selectedRecommendationCategory, setSelectedRecommendationCategory] = useState("全部");
   const [selectedRecommendationStyle, setSelectedRecommendationStyle] = useState("全部");
   const [recommendationSection, setRecommendationSection] = useState<AsyncSection<RecommendationsResponse>>({
@@ -155,9 +158,8 @@ export function HomePageClient() {
 
   const [compareSection, setCompareSection] = useState<AsyncSection<CompareResponse>>(createSection());
   const [isCompareRefreshing, setIsCompareRefreshing] = useState(false);
-
-  const activeSymbol = normalizeSymbol(searchParams.get("symbol") ?? "");
-  const compareSymbols = parseCompareSymbols(searchParams.get("compare"));
+  const [activeSymbol, setActiveSymbol] = useState(urlActiveSymbol);
+  const [compareSymbols, setCompareSymbols] = useState<string[]>(urlCompareSymbols);
   const isPanelOpen = activeSymbol.length > 0;
 
   const data = recommendationSection.status === "success" ? recommendationSection.data : null;
@@ -187,6 +189,14 @@ export function HomePageClient() {
   useEffect(() => {
     recommendationQuoteSnapshotsRef.current = recommendationQuoteSnapshots;
   }, [recommendationQuoteSnapshots]);
+
+  useEffect(() => {
+    setActiveSymbol(urlActiveSymbol);
+  }, [urlActiveSymbol]);
+
+  useEffect(() => {
+    setCompareSymbols(parseCompareSymbols(rawCompareParam));
+  }, [rawCompareParam]);
 
   useEffect(() => {
     const localWatchlist = loadWatchlist();
@@ -338,35 +348,37 @@ export function HomePageClient() {
     };
   }, [compareSymbols]);
 
-  const updateRouteParams = (updater: (params: URLSearchParams) => void) => {
+  const syncRouteParams = (nextSymbol: string, nextCompareSymbols: string[]) => {
     const params = new URLSearchParams(searchParams.toString());
-    updater(params);
+    if (nextSymbol) {
+      params.set("symbol", nextSymbol);
+    } else {
+      params.delete("symbol");
+    }
+
+    if (nextCompareSymbols.length > 0) {
+      params.set("compare", nextCompareSymbols.join(","));
+    } else {
+      params.delete("compare");
+    }
+
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname);
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
   const updateDrawerSymbol = (symbol: string | null) => {
-    updateRouteParams((params) => {
-      if (symbol) {
-        params.set("symbol", normalizeSymbol(symbol));
-      } else {
-        params.delete("symbol");
-      }
-    });
+    const nextSymbol = symbol ? normalizeSymbol(symbol) : "";
+    setActiveSymbol(nextSymbol);
+    syncRouteParams(nextSymbol, compareSymbols);
   };
 
   const updateCompareSymbols = (symbols: string[]) => {
-    updateRouteParams((params) => {
-      const normalized = Array.from(new Set(symbols.map((item) => normalizeSymbol(item)).filter(Boolean))).slice(
-        0,
-        MAX_COMPARE_SYMBOLS
-      );
-      if (normalized.length > 0) {
-        params.set("compare", normalized.join(","));
-      } else {
-        params.delete("compare");
-      }
-    });
+    const normalized = Array.from(new Set(symbols.map((item) => normalizeSymbol(item)).filter(Boolean))).slice(
+      0,
+      MAX_COMPARE_SYMBOLS
+    );
+    setCompareSymbols(normalized);
+    syncRouteParams(activeSymbol, normalized);
   };
 
   const toggleCompareSymbol = (symbol: string) => {
