@@ -1,7 +1,9 @@
 from collections.abc import Generator
+import logging
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
@@ -9,6 +11,7 @@ from app.db.models import Base
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 engine = (
     create_engine(
@@ -52,4 +55,7 @@ def get_db() -> Generator[Session, None, None]:
 def init_db_schema() -> None:
     if engine is None:
         return
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except SQLAlchemyError as exc:
+        logger.warning("Database schema initialization skipped because the database is unavailable: %s", exc)
