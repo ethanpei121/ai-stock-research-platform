@@ -412,7 +412,7 @@ export async function getNews(symbol: string, limit = 5, options?: FreshOptions)
 export async function getFundamentals(symbol: string): Promise<FundamentalsResponse> {
   return normalizeFundamentals(
     await request<unknown>(`/api/v1/fundamentals?symbol=${encodeURIComponent(symbol)}`, {
-      timeoutMs: 45_000,
+      timeoutMs: 16_000,
     })
   );
 }

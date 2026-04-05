@@ -7,6 +7,6 @@ export const maxDuration = 60;
 
 export async function GET(request: NextRequest): Promise<Response> {
   return proxyBackend(`/api/v1/fundamentals${request.nextUrl.search}`, {
-    timeoutMs: 45_000,
+    timeoutMs: 16_000,
   });
 }

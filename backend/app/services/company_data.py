@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from queue import Empty, Queue
 from typing import Any
 
 import yfinance as yf
@@ -35,6 +37,10 @@ CNINFO_PROVIDER = "CNINFO Disclosure"
 TUSHARE_FUNDAMENTALS_PROVIDER = "Tushare Fundamentals"
 TUSHARE_ANNOUNCEMENT_PROVIDER = "Tushare Announcements"
 YAHOO_FUNDAMENTALS_PROVIDER = "Yahoo Finance Fundamentals"
+OPTIONAL_CALL_TIMEOUT_SECONDS = 4.0
+YFINANCE_FAST_INFO_TIMEOUT_SECONDS = 3.0
+YFINANCE_INFO_TIMEOUT_SECONDS = 4.0
+YFINANCE_STATEMENT_TIMEOUT_SECONDS = 4.0
 
 FUNDAMENTALS_CACHE = TTLCache[FundamentalsResponse](ttl_seconds=21600)
 ANNOUNCEMENTS_CACHE = TTLCache[list[AnnouncementItem]](ttl_seconds=900)
@@ -46,6 +52,43 @@ class SupplementalProviderUnavailableError(Exception):
 
 class SupplementalProviderNotFoundError(Exception):
     pass
+
+
+def _run_with_timeout(loader: Any, timeout_seconds: float) -> Any:
+    result_queue: Queue[tuple[bool, Any]] = Queue(maxsize=1)
+
+    def target() -> None:
+        try:
+            result_queue.put((True, loader()))
+        except Exception as exc:  # pragma: no cover - passthrough for upstream/runtime errors
+            result_queue.put((False, exc))
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+
+    if thread.is_alive():
+        raise TimeoutError(f"request timed out after {timeout_seconds:.1f}s")
+
+    try:
+        succeeded, payload = result_queue.get_nowait()
+    except Empty as exc:  # pragma: no cover - defensive branch
+        raise TimeoutError("request exited without returning a result") from exc
+
+    if succeeded:
+        return payload
+    raise payload
+
+
+def _safe_optional_call(loader: Any, *, timeout_seconds: float, label: str) -> tuple[Any | None, bool]:
+    try:
+        return _run_with_timeout(loader, timeout_seconds), False
+    except TimeoutError:
+        logger.warning("%s timed out after %.1fs", label, timeout_seconds)
+        return None, True
+    except Exception as exc:  # pragma: no cover - network/runtime dependent
+        logger.warning("%s failed: %s", label, exc)
+        return None, True
 
 
 @lru_cache(maxsize=1)
@@ -271,33 +314,89 @@ def _fetch_fundamentals_from_akshare(symbol: str) -> FundamentalsResponse:
         raise SupplementalProviderUnavailableError("akshare is not installed")
 
     code = _base_symbol(symbol)
-    try:
-        info_df = ak.stock_individual_info_em(symbol=code)
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        raise SupplementalProviderUnavailableError("AkShare individual info request failed") from exc
-
+    unavailable = False
+    info_df, info_unavailable = _safe_optional_call(
+        lambda: ak.stock_individual_info_em(symbol=code),
+        timeout_seconds=OPTIONAL_CALL_TIMEOUT_SECONDS,
+        label=f"AkShare individual info request for {symbol}",
+    )
+    unavailable = unavailable or info_unavailable
     info_map = {
         str(row.get("item") or "").strip(): row.get("value")
         for row in _iter_rows(info_df)
         if str(row.get("item") or "").strip()
     }
-    if not info_map:
-        raise SupplementalProviderNotFoundError("AkShare returned empty individual info")
 
     spot_row = None
-    try:
-        spot_row = _find_row_by_code(ak.stock_zh_a_spot_em(), code)
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        logger.warning("AkShare spot fundamentals supplement failed for %s: %s", symbol, exc)
+    spot_df, spot_unavailable = _safe_optional_call(
+        ak.stock_zh_a_spot_em,
+        timeout_seconds=OPTIONAL_CALL_TIMEOUT_SECONDS,
+        label=f"AkShare spot fundamentals supplement for {symbol}",
+    )
+    unavailable = unavailable or spot_unavailable
+    if spot_df is not None:
+        spot_row = _find_row_by_code(spot_df, code)
 
     fa_row: dict[str, Any] = {}
-    try:
-        fa_df = ak.stock_financial_analysis_indicator_em(symbol=code)
-        fa_rows = _iter_rows(fa_df)
-        if fa_rows:
-            fa_row = fa_rows[0]
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        logger.warning("AkShare financial indicator fetch failed for %s: %s", symbol, exc)
+    fa_df, fa_unavailable = _safe_optional_call(
+        lambda: ak.stock_financial_analysis_indicator_em(symbol=code),
+        timeout_seconds=OPTIONAL_CALL_TIMEOUT_SECONDS,
+        label=f"AkShare financial indicator fetch for {symbol}",
+    )
+    unavailable = unavailable or fa_unavailable
+    fa_rows = _iter_rows(fa_df)
+    if fa_rows:
+        fa_row = fa_rows[0]
+
+    company_name = _pick_first_text(
+        info_map.get("股票简称"),
+        info_map.get("证券简称"),
+        spot_row.get("名称") if spot_row else None,
+    )
+    industry = _pick_first_text(info_map.get("行业"), info_map.get("所属行业"))
+    market_cap = _safe_float(_pick_first_value(info_map.get("总市值"), spot_row.get("总市值") if spot_row else None))
+    float_market_cap = _safe_float(
+        _pick_first_value(info_map.get("流通市值"), spot_row.get("流通市值") if spot_row else None)
+    )
+    pe_ratio = _safe_float(spot_row.get("市盈率-动态") if spot_row else None)
+    pb_ratio = _safe_float(spot_row.get("市净率") if spot_row else None)
+    roe = _safe_float(_first_value_from_columns(fa_row, ["净资产收益率(%)", "净资产收益率", "加权净资产收益率(%)", "ROEJQ"]))
+    gross_margin = _safe_float(_first_value_from_columns(fa_row, ["销售毛利率(%)", "销售毛利率", "毛利率", "XSMLL"]))
+    net_margin = _safe_float(_first_value_from_columns(fa_row, ["销售净利率(%)", "销售净利率", "净利率", "XSJLL"]))
+    debt_to_asset = _safe_float(_first_value_from_columns(fa_row, ["资产负债率(%)", "资产负债率", "ZCFZL"]))
+    revenue_growth = _safe_float(
+        _first_value_from_columns(
+            fa_row,
+            ["营业总收入同比增长(%)", "营业收入同比增长(%)", "营业收入同比增长", "TOTALOPERATEREVTZ", "营业总收入同比"],
+        )
+    )
+    net_profit_growth = _safe_float(
+        _first_value_from_columns(
+            fa_row,
+            ["归属净利润同比增长(%)", "净利润同比增长(%)", "归母净利润同比增长(%)", "PARENTNETPROFITTZ", "净利润同比增长"],
+        )
+    )
+
+    has_any_signal = any(
+        value is not None
+        for value in (
+            market_cap,
+            float_market_cap,
+            pe_ratio,
+            pb_ratio,
+            roe,
+            gross_margin,
+            net_margin,
+            debt_to_asset,
+            revenue_growth,
+            net_profit_growth,
+        )
+    ) or bool(company_name) or bool(industry)
+
+    if not has_any_signal:
+        if unavailable:
+            raise SupplementalProviderUnavailableError("AkShare fundamentals request failed")
+        raise SupplementalProviderNotFoundError("AkShare returned empty fundamentals")
 
     providers = [AKSHARE_FUNDAMENTALS_PROVIDER]
     if spot_row:
@@ -307,19 +406,19 @@ def _fetch_fundamentals_from_akshare(symbol: str) -> FundamentalsResponse:
         symbol=symbol,
         as_of=_coerce_datetime(_pick_first_value(fa_row.get("报告期"), fa_row.get("REPORT_DATE"), datetime.now(timezone.utc))),
         providers=list(dict.fromkeys(providers)),
-        company_name=_pick_first_text(info_map.get("股票简称"), info_map.get("证券简称")),
-        industry=_pick_first_text(info_map.get("行业"), info_map.get("所属行业")),
+        company_name=company_name,
+        industry=industry,
         listed_date=_normalize_date_text(info_map.get("上市时间")),
-        market_cap=_safe_float(_pick_first_value(info_map.get("总市值"), spot_row.get("总市值") if spot_row else None)),
-        float_market_cap=_safe_float(_pick_first_value(info_map.get("流通市值"), spot_row.get("流通市值") if spot_row else None)),
-        pe_ratio=_safe_float(spot_row.get("市盈率-动态") if spot_row else None),
-        pb_ratio=_safe_float(spot_row.get("市净率") if spot_row else None),
-        roe=_safe_float(_first_value_from_columns(fa_row, ["净资产收益率(%)", "净资产收益率", "加权净资产收益率(%)", "ROEJQ"])),
-        gross_margin=_safe_float(_first_value_from_columns(fa_row, ["销售毛利率(%)", "销售毛利率", "毛利率", "XSMLL"])),
-        net_margin=_safe_float(_first_value_from_columns(fa_row, ["销售净利率(%)", "销售净利率", "净利率", "XSJLL"])),
-        debt_to_asset=_safe_float(_first_value_from_columns(fa_row, ["资产负债率(%)", "资产负债率", "ZCFZL"])),
-        revenue_growth=_safe_float(_first_value_from_columns(fa_row, ["营业总收入同比增长(%)", "营业收入同比增长(%)", "营业收入同比增长", "TOTALOPERATEREVTZ", "营业总收入同比"])),
-        net_profit_growth=_safe_float(_first_value_from_columns(fa_row, ["归属净利润同比增长(%)", "净利润同比增长(%)", "归母净利润同比增长(%)", "PARENTNETPROFITTZ", "净利润同比增长"])),
+        market_cap=market_cap,
+        float_market_cap=float_market_cap,
+        pe_ratio=pe_ratio,
+        pb_ratio=pb_ratio,
+        roe=roe,
+        gross_margin=gross_margin,
+        net_margin=net_margin,
+        debt_to_asset=debt_to_asset,
+        revenue_growth=revenue_growth,
+        net_profit_growth=net_profit_growth,
         source_note="A 股基本面优先来自东方财富与 AkShare 包装接口，适合演示与研究入口。",
     )
 
@@ -334,25 +433,37 @@ def _fetch_fundamentals_from_tushare(symbol: str) -> FundamentalsResponse:
     start_date = (today - timedelta(days=180)).strftime("%Y%m%d")
     end_date = today.strftime("%Y%m%d")
 
-    try:
-        basic_df = client.stock_basic(ts_code=ts_code, fields="ts_code,symbol,name,area,industry,market,list_date")
-        daily_df = client.daily_basic(
+    basic_df, basic_unavailable = _safe_optional_call(
+        lambda: client.stock_basic(ts_code=ts_code, fields="ts_code,symbol,name,area,industry,market,list_date"),
+        timeout_seconds=OPTIONAL_CALL_TIMEOUT_SECONDS,
+        label=f"Tushare stock_basic request for {symbol}",
+    )
+    daily_df, daily_unavailable = _safe_optional_call(
+        lambda: client.daily_basic(
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
             fields="ts_code,trade_date,pe,pb,total_mv,circ_mv",
-        )
-        fina_df = client.fina_indicator(
+        ),
+        timeout_seconds=OPTIONAL_CALL_TIMEOUT_SECONDS,
+        label=f"Tushare daily_basic request for {symbol}",
+    )
+    fina_df, fina_unavailable = _safe_optional_call(
+        lambda: client.fina_indicator(
             ts_code=ts_code,
             start_date=start_date,
             end_date=end_date,
             fields="ts_code,ann_date,end_date,roe,grossprofit_margin,netprofit_margin,debt_to_assets,q_sales_yoy,q_dtprofit_yoy",
-        )
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        raise SupplementalProviderUnavailableError("Tushare fundamentals request failed") from exc
+        ),
+        timeout_seconds=OPTIONAL_CALL_TIMEOUT_SECONDS,
+        label=f"Tushare fina_indicator request for {symbol}",
+    )
+    unavailable = basic_unavailable or daily_unavailable or fina_unavailable
 
     basic_rows = _iter_rows(basic_df)
     if not basic_rows:
+        if unavailable:
+            raise SupplementalProviderUnavailableError("Tushare fundamentals request failed")
         raise SupplementalProviderNotFoundError("Tushare returned no basic company data")
 
     basic_row = basic_rows[0]
@@ -384,23 +495,46 @@ def _fetch_fundamentals_from_tushare(symbol: str) -> FundamentalsResponse:
 
 def _fetch_fundamentals_from_yfinance(symbol: str) -> FundamentalsResponse:
     ticker = yf.Ticker(symbol)
-    fast_info = _safe_yfinance_fast_info(ticker)
-    try:
-        info = ticker.info or {}
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        logger.warning("Yahoo Finance fundamentals info fetch failed for %s: %s", symbol, exc)
-        info = {}
-
-    if not isinstance(info, dict):
-        info = {}
-
-    income_stmt = _pick_first_value(
-        _safe_yfinance_statement_frame(lambda: ticker.quarterly_income_stmt, symbol, "quarterly income statement"),
-        _safe_yfinance_statement_frame(lambda: ticker.income_stmt, symbol, "annual income statement"),
+    fast_info, fast_info_unavailable = _safe_yfinance_fast_info(ticker)
+    info, info_unavailable = _safe_yfinance_info(ticker, symbol)
+    income_stmt_quarterly, quarterly_income_unavailable = _safe_yfinance_statement_frame(
+        lambda: ticker.quarterly_income_stmt,
+        symbol,
+        "quarterly income statement",
     )
-    balance_sheet = _pick_first_value(
-        _safe_yfinance_statement_frame(lambda: ticker.quarterly_balance_sheet, symbol, "quarterly balance sheet"),
-        _safe_yfinance_statement_frame(lambda: ticker.balance_sheet, symbol, "annual balance sheet"),
+    income_stmt_annual = None
+    annual_income_unavailable = False
+    if income_stmt_quarterly is None:
+        income_stmt_annual, annual_income_unavailable = _safe_yfinance_statement_frame(
+            lambda: ticker.income_stmt,
+            symbol,
+            "annual income statement",
+        )
+    income_stmt = _pick_first_value(income_stmt_quarterly, income_stmt_annual)
+
+    balance_sheet_quarterly, quarterly_balance_unavailable = _safe_yfinance_statement_frame(
+        lambda: ticker.quarterly_balance_sheet,
+        symbol,
+        "quarterly balance sheet",
+    )
+    balance_sheet_annual = None
+    annual_balance_unavailable = False
+    if balance_sheet_quarterly is None:
+        balance_sheet_annual, annual_balance_unavailable = _safe_yfinance_statement_frame(
+            lambda: ticker.balance_sheet,
+            symbol,
+            "annual balance sheet",
+        )
+    balance_sheet = _pick_first_value(balance_sheet_quarterly, balance_sheet_annual)
+    unavailable = any(
+        (
+            fast_info_unavailable,
+            info_unavailable,
+            quarterly_income_unavailable,
+            annual_income_unavailable,
+            quarterly_balance_unavailable,
+            annual_balance_unavailable,
+        )
     )
 
     revenue_values = _extract_statement_values(
@@ -527,6 +661,8 @@ def _fetch_fundamentals_from_yfinance(symbol: str) -> FundamentalsResponse:
     ) or bool(industry)
 
     if not has_any_signal:
+        if unavailable:
+            raise SupplementalProviderUnavailableError("Yahoo Finance fundamentals request failed")
         raise SupplementalProviderNotFoundError("Yahoo Finance returned no usable fundamentals")
 
     return FundamentalsResponse(
@@ -879,29 +1015,37 @@ def _ratio_to_percent(value: Any) -> float | None:
     return round(parsed, 4)
 
 
-def _safe_yfinance_fast_info(ticker: yf.Ticker) -> dict[str, Any]:
-    try:
-        raw_fast_info = ticker.fast_info or {}
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        logger.warning("Yahoo Finance fast_info fetch failed: %s", exc)
-        return {}
+def _safe_yfinance_fast_info(ticker: yf.Ticker) -> tuple[dict[str, Any], bool]:
+    raw_fast_info, unavailable = _safe_optional_call(
+        lambda: ticker.fast_info or {},
+        timeout_seconds=YFINANCE_FAST_INFO_TIMEOUT_SECONDS,
+        label="Yahoo Finance fast_info request",
+    )
 
     try:
-        return dict(raw_fast_info)
+        return dict(raw_fast_info or {}), unavailable
     except Exception:
-        return {}
+        return {}, unavailable
 
 
-def _safe_yfinance_statement_frame(loader: Any, symbol: str, label: str) -> Any | None:
-    try:
-        frame = loader()
-    except Exception as exc:  # pragma: no cover - network/runtime dependent
-        logger.warning("Yahoo Finance %s fetch failed for %s: %s", label, symbol, exc)
-        return None
+def _safe_yfinance_info(ticker: yf.Ticker, symbol: str) -> tuple[dict[str, Any], bool]:
+    info, unavailable = _safe_optional_call(
+        lambda: ticker.info or {},
+        timeout_seconds=YFINANCE_INFO_TIMEOUT_SECONDS,
+        label=f"Yahoo Finance fundamentals info fetch for {symbol}",
+    )
+    return info if isinstance(info, dict) else {}, unavailable
 
+
+def _safe_yfinance_statement_frame(loader: Any, symbol: str, label: str) -> tuple[Any | None, bool]:
+    frame, unavailable = _safe_optional_call(
+        loader,
+        timeout_seconds=YFINANCE_STATEMENT_TIMEOUT_SECONDS,
+        label=f"Yahoo Finance {label} fetch for {symbol}",
+    )
     if frame is None or getattr(frame, "empty", True):
-        return None
-    return frame
+        return None, unavailable
+    return frame, unavailable
 
 
 def _extract_statement_values(frame: Any, row_labels: list[str]) -> list[float]:
