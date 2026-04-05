@@ -32,6 +32,7 @@ import {
   upsertRecentViewedItem,
   upsertWatchlistItem,
 } from "@/lib/research-tracker";
+import { isValidNormalizedSymbol, normalizeSymbolInput } from "@/lib/symbols";
 import type {
   AsyncSection,
   CompareResponse,
@@ -56,10 +57,6 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
 }
 
-function normalizeSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase();
-}
-
 function parseCompareSymbols(rawValue: string | null): string[] {
   if (!rawValue) {
     return [];
@@ -67,8 +64,8 @@ function parseCompareSymbols(rawValue: string | null): string[] {
 
   const values = rawValue
     .split(",")
-    .map((item) => normalizeSymbol(item))
-    .filter(Boolean);
+    .map((item) => normalizeSymbolInput(item))
+    .filter((item) => item.length > 0 && isValidNormalizedSymbol(item));
 
   return Array.from(new Set(values)).slice(0, MAX_COMPARE_SYMBOLS);
 }
@@ -136,7 +133,7 @@ export function HomePageClient() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const urlActiveSymbol = normalizeSymbol(searchParams.get("symbol") ?? "");
+  const urlActiveSymbol = normalizeSymbolInput(searchParams.get("symbol") ?? "");
   const rawCompareParam = searchParams.get("compare");
   const urlCompareSymbols = parseCompareSymbols(rawCompareParam);
   const [selectedRecommendationCategory, setSelectedRecommendationCategory] = useState("全部");
@@ -196,6 +193,8 @@ export function HomePageClient() {
 
   useEffect(() => {
     setCompareSymbols(parseCompareSymbols(rawCompareParam));
+    setCompareSection(createSection());
+    setIsCompareRefreshing(false);
   }, [rawCompareParam]);
 
   useEffect(() => {
@@ -322,32 +321,6 @@ export function HomePageClient() {
     };
   }, [activeSymbol, data, recentViews, selectedRecommendationCategory, selectedRecommendationStyle, watchlist]);
 
-  useEffect(() => {
-    if (compareSymbols.length < 2) {
-      setCompareSection(createSection());
-      return;
-    }
-
-    let cancelled = false;
-    setCompareSection(createSection("loading"));
-
-    void getCompare(compareSymbols)
-      .then((response) => {
-        if (!cancelled) {
-          setCompareSection({ status: "success", data: response, error: null });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setCompareSection({ status: "error", data: null, error: toErrorMessage(error) });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [compareSymbols]);
-
   const syncRouteParams = (nextSymbol: string, nextCompareSymbols: string[]) => {
     const params = new URLSearchParams(searchParams.toString());
     if (nextSymbol) {
@@ -367,22 +340,46 @@ export function HomePageClient() {
   };
 
   const updateDrawerSymbol = (symbol: string | null) => {
-    const nextSymbol = symbol ? normalizeSymbol(symbol) : "";
+    const nextSymbol = symbol ? normalizeSymbolInput(symbol) : "";
     setActiveSymbol(nextSymbol);
     syncRouteParams(nextSymbol, compareSymbols);
   };
 
   const updateCompareSymbols = (symbols: string[]) => {
-    const normalized = Array.from(new Set(symbols.map((item) => normalizeSymbol(item)).filter(Boolean))).slice(
-      0,
-      MAX_COMPARE_SYMBOLS
-    );
+    const normalized = Array.from(
+      new Set(
+        symbols
+          .map((item) => normalizeSymbolInput(item))
+          .filter((item) => item.length > 0 && isValidNormalizedSymbol(item))
+      )
+    ).slice(0, MAX_COMPARE_SYMBOLS);
     setCompareSymbols(normalized);
+    setCompareSection(createSection());
+    setIsCompareRefreshing(false);
     syncRouteParams(activeSymbol, normalized);
   };
 
+  const addCompareSymbol = (symbol: string): string | null => {
+    const normalized = normalizeSymbolInput(symbol);
+    if (!normalized) {
+      return "请输入股票代码后再加入对比。";
+    }
+    if (!isValidNormalizedSymbol(normalized)) {
+      return "股票代码格式无效，请输入类似 AAPL、TSM、600519 或 0700。";
+    }
+    if (compareSymbols.includes(normalized)) {
+      return `${normalized} 已经在对比列表中了。`;
+    }
+    if (compareSymbols.length >= MAX_COMPARE_SYMBOLS) {
+      return "对比分析最多支持 4 只股票。";
+    }
+
+    updateCompareSymbols([...compareSymbols, normalized]);
+    return null;
+  };
+
   const toggleCompareSymbol = (symbol: string) => {
-    const normalized = normalizeSymbol(symbol);
+    const normalized = normalizeSymbolInput(symbol);
     if (!normalized) {
       return;
     }
@@ -399,20 +396,29 @@ export function HomePageClient() {
     updateCompareSymbols([]);
   };
 
-  const refreshCompare = async () => {
+  const requestCompare = async (fresh: boolean) => {
     if (compareSymbols.length < 2) {
       return;
     }
 
     setIsCompareRefreshing(true);
+    setCompareSection(createSection("loading"));
     try {
-      const response = await getCompare(compareSymbols, { fresh: true });
+      const response = await getCompare(compareSymbols, { fresh });
       setCompareSection({ status: "success", data: response, error: null });
     } catch (error) {
       setCompareSection({ status: "error", data: null, error: toErrorMessage(error) });
     } finally {
       setIsCompareRefreshing(false);
     }
+  };
+
+  const runCompare = async () => {
+    await requestCompare(false);
+  };
+
+  const refreshCompare = async () => {
+    await requestCompare(true);
   };
 
   const refreshRecommendations = async () => {
@@ -449,7 +455,7 @@ export function HomePageClient() {
     tags?: string[] | null;
   }) => {
     setWatchlist((current) => {
-      const normalizedSymbol = normalizeSymbol(input.symbol);
+      const normalizedSymbol = normalizeSymbolInput(input.symbol);
       const existing = current.find((item) => item.symbol === normalizedSymbol);
 
       if (existing) {
@@ -491,7 +497,7 @@ export function HomePageClient() {
   const updateWatchlistStatus = (symbol: string, status: ResearchStatus) => {
     setWatchlist((current) => {
       const next = setWatchlistStatus(current, symbol, status);
-      const updatedItem = next.find((item) => item.symbol === normalizeSymbol(symbol));
+      const updatedItem = next.find((item) => item.symbol === normalizeSymbolInput(symbol));
       if (researchClientId && updatedItem) {
         void saveWatchlistItem({
           clientId: researchClientId,
@@ -551,9 +557,11 @@ export function HomePageClient() {
           <CompareWorkspace
             section={compareSection}
             selectedSymbols={compareSymbols}
+            onAddSymbol={addCompareSymbol}
             onOpenSymbol={updateDrawerSymbol}
             onRemoveSymbol={toggleCompareSymbol}
             onClear={clearCompareSymbols}
+            onRunAnalysis={runCompare}
             onRefresh={refreshCompare}
             isRefreshing={isCompareRefreshing}
           />

@@ -1,4 +1,5 @@
 import type { RecentViewedItem, ResearchStatus, WatchlistItem } from "@/lib/types";
+import { normalizeSymbolInput } from "@/lib/symbols";
 
 export const WATCHLIST_STORAGE_KEY = "ai-stock-research.watchlist.v1";
 export const RECENT_VIEWS_STORAGE_KEY = "ai-stock-research.recent-views.v1";
@@ -13,10 +14,6 @@ type StockReference = {
   region?: string | null;
   tags?: string[] | null;
 };
-
-function normalizeSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase();
-}
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -84,7 +81,7 @@ function normalizeWatchlistItem(value: unknown): WatchlistItem | null {
   const status = isResearchStatus(record.status) ? record.status : "待研究";
 
   return {
-    symbol: normalizeSymbol(symbol),
+    symbol: normalizeSymbolInput(symbol),
     company_name: companyName,
     market: asString(record.market),
     region: asString(record.region),
@@ -107,8 +104,8 @@ function normalizeRecentViewedItem(value: unknown): RecentViewedItem | null {
   }
 
   return {
-    symbol: normalizeSymbol(symbol),
-    company_name: asString(record.company_name) ?? normalizeSymbol(symbol),
+    symbol: normalizeSymbolInput(symbol),
+    company_name: asString(record.company_name) ?? normalizeSymbolInput(symbol),
     viewed_at: asString(record.viewed_at) ?? new Date().toISOString(),
   };
 }
@@ -157,12 +154,12 @@ export function saveRecentViews(items: RecentViewedItem[]): void {
 }
 
 export function isInWatchlist(items: WatchlistItem[], symbol: string): boolean {
-  const normalizedSymbol = normalizeSymbol(symbol);
+  const normalizedSymbol = normalizeSymbolInput(symbol);
   return items.some((item) => item.symbol === normalizedSymbol);
 }
 
 export function upsertWatchlistItem(items: WatchlistItem[], stock: StockReference): WatchlistItem[] {
-  const symbol = normalizeSymbol(stock.symbol);
+  const symbol = normalizeSymbolInput(stock.symbol);
   const now = new Date().toISOString();
   const existing = items.find((item) => item.symbol === symbol);
 
@@ -198,7 +195,7 @@ export function upsertWatchlistItem(items: WatchlistItem[], stock: StockReferenc
 }
 
 export function removeWatchlistItem(items: WatchlistItem[], symbol: string): WatchlistItem[] {
-  const normalizedSymbol = normalizeSymbol(symbol);
+  const normalizedSymbol = normalizeSymbolInput(symbol);
   return items.filter((item) => item.symbol !== normalizedSymbol);
 }
 
@@ -207,7 +204,7 @@ export function setWatchlistStatus(
   symbol: string,
   status: ResearchStatus
 ): WatchlistItem[] {
-  const normalizedSymbol = normalizeSymbol(symbol);
+  const normalizedSymbol = normalizeSymbolInput(symbol);
   const now = new Date().toISOString();
 
   return items
@@ -224,7 +221,7 @@ export function setWatchlistStatus(
 }
 
 export function upsertRecentViewedItem(items: RecentViewedItem[], stock: StockReference): RecentViewedItem[] {
-  const symbol = normalizeSymbol(stock.symbol);
+  const symbol = normalizeSymbolInput(stock.symbol);
   const nextItem: RecentViewedItem = {
     symbol,
     company_name: stock.company_name?.trim() || symbol,

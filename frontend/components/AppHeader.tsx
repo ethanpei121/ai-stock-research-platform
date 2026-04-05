@@ -5,17 +5,14 @@ import { useEffect, useState } from "react";
 import { Search, Sparkles } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-
-function normalizeSymbol(value: string): string {
-  return value.trim().toUpperCase();
-}
+import { normalizeSymbolInput } from "@/lib/symbols";
 
 
 export function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeSymbol = searchParams.get("symbol") ?? "";
+  const activeSymbol = normalizeSymbolInput(searchParams.get("symbol") ?? "");
   const [query, setQuery] = useState(activeSymbol);
 
   useEffect(() => {
@@ -25,7 +22,7 @@ export function AppHeader() {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const nextSymbol = normalizeSymbol(query);
+    const nextSymbol = normalizeSymbolInput(query);
     if (!nextSymbol) {
       return;
     }

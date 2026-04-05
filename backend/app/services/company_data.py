@@ -384,42 +384,169 @@ def _fetch_fundamentals_from_tushare(symbol: str) -> FundamentalsResponse:
 
 def _fetch_fundamentals_from_yfinance(symbol: str) -> FundamentalsResponse:
     ticker = yf.Ticker(symbol)
+    fast_info = _safe_yfinance_fast_info(ticker)
     try:
         info = ticker.info or {}
     except Exception as exc:  # pragma: no cover - network/runtime dependent
-        raise SupplementalProviderUnavailableError("Yahoo Finance fundamentals request failed") from exc
+        logger.warning("Yahoo Finance fundamentals info fetch failed for %s: %s", symbol, exc)
+        info = {}
 
-    if not isinstance(info, dict) or not info:
-        raise SupplementalProviderNotFoundError("Yahoo Finance returned empty fundamentals")
+    if not isinstance(info, dict):
+        info = {}
 
-    company_name = _pick_first_text(info.get("shortName"), info.get("longName"))
-    if not company_name:
-        raise SupplementalProviderNotFoundError("Yahoo Finance returned no company name")
+    income_stmt = _pick_first_value(
+        _safe_yfinance_statement_frame(lambda: ticker.quarterly_income_stmt, symbol, "quarterly income statement"),
+        _safe_yfinance_statement_frame(lambda: ticker.income_stmt, symbol, "annual income statement"),
+    )
+    balance_sheet = _pick_first_value(
+        _safe_yfinance_statement_frame(lambda: ticker.quarterly_balance_sheet, symbol, "quarterly balance sheet"),
+        _safe_yfinance_statement_frame(lambda: ticker.balance_sheet, symbol, "annual balance sheet"),
+    )
 
-    float_shares = _safe_float(info.get("floatShares"))
-    current_price = _safe_float(info.get("currentPrice")) or _safe_float(info.get("regularMarketPrice"))
+    revenue_values = _extract_statement_values(
+        income_stmt,
+        ["Total Revenue", "Operating Revenue", "Revenue"],
+    )
+    net_income_values = _extract_statement_values(
+        income_stmt,
+        ["Net Income", "Net Income Common Stockholders", "Net Income Including Noncontrolling Interests"],
+    )
+    gross_profit_values = _extract_statement_values(income_stmt, ["Gross Profit"])
+    equity_values = _extract_statement_values(
+        balance_sheet,
+        ["Stockholders Equity", "Total Stockholder Equity", "Total Equity Gross Minority Interest", "Common Stock Equity"],
+    )
+    total_assets_values = _extract_statement_values(balance_sheet, ["Total Assets"])
+    total_debt_values = _extract_statement_values(
+        balance_sheet,
+        ["Total Debt", "Total Liabilities Net Minority Interest", "Total Liabilities"],
+    )
+
+    current_price = _safe_float(
+        _pick_first_value(
+            info.get("currentPrice"),
+            info.get("regularMarketPrice"),
+            fast_info.get("lastPrice"),
+            fast_info.get("last_price"),
+        )
+    )
+    shares_outstanding = _safe_float(
+        _pick_first_value(
+            info.get("sharesOutstanding"),
+            info.get("impliedSharesOutstanding"),
+            fast_info.get("shares"),
+            fast_info.get("sharesOutstanding"),
+        )
+    )
+    market_cap = _safe_float(
+        _pick_first_value(
+            info.get("marketCap"),
+            fast_info.get("marketCap"),
+            fast_info.get("market_cap"),
+        )
+    )
+    if market_cap is None and shares_outstanding is not None and current_price is not None:
+        market_cap = shares_outstanding * current_price
+
+    float_shares = _safe_float(
+        _pick_first_value(
+            info.get("floatShares"),
+            fast_info.get("floatShares"),
+            fast_info.get("float_shares"),
+            shares_outstanding,
+        )
+    )
     float_market_cap = None
     if float_shares is not None and current_price is not None:
         float_market_cap = float_shares * current_price
 
+    latest_revenue = revenue_values[0] if revenue_values else None
+    latest_net_income = net_income_values[0] if net_income_values else None
+    latest_gross_profit = gross_profit_values[0] if gross_profit_values else None
+    latest_equity = equity_values[0] if equity_values else None
+    latest_total_assets = total_assets_values[0] if total_assets_values else None
+    latest_total_debt = total_debt_values[0] if total_debt_values else None
+
+    pe_ratio = _safe_float(_pick_first_value(info.get("trailingPE"), info.get("forwardPE")))
+    if pe_ratio is None and market_cap is not None and latest_net_income not in (None, 0):
+        pe_ratio = market_cap / latest_net_income
+
+    pb_ratio = _safe_float(info.get("priceToBook"))
+    if pb_ratio is None and market_cap is not None and latest_equity not in (None, 0):
+        pb_ratio = market_cap / latest_equity
+
+    roe = _ratio_to_percent(info.get("returnOnEquity"))
+    if roe is None and latest_net_income is not None and latest_equity not in (None, 0):
+        roe = round((latest_net_income / latest_equity) * 100, 4)
+
+    gross_margin = _ratio_to_percent(info.get("grossMargins"))
+    if gross_margin is None and latest_gross_profit is not None and latest_revenue not in (None, 0):
+        gross_margin = round((latest_gross_profit / latest_revenue) * 100, 4)
+
+    net_margin = _ratio_to_percent(info.get("profitMargins"))
+    if net_margin is None and latest_net_income is not None and latest_revenue not in (None, 0):
+        net_margin = round((latest_net_income / latest_revenue) * 100, 4)
+
+    debt_to_asset = None
+    if latest_total_debt is not None and latest_total_assets not in (None, 0):
+        debt_to_asset = round((latest_total_debt / latest_total_assets) * 100, 4)
+
+    revenue_growth = _ratio_to_percent(info.get("revenueGrowth"))
+    if revenue_growth is None:
+        revenue_growth = _calculate_growth_percent(revenue_values)
+
+    net_profit_growth = _ratio_to_percent(info.get("earningsGrowth"))
+    if net_profit_growth is None:
+        net_profit_growth = _calculate_growth_percent(net_income_values)
+
+    company_name = _pick_first_text(
+        info.get("shortName"),
+        info.get("longName"),
+        info.get("displayName"),
+        info.get("name"),
+        symbol,
+    )
+    industry = _pick_first_text(info.get("industry"), info.get("sector"))
+    listed_date = _normalize_epoch_date(_pick_first_value(info.get("firstTradeDateEpochUtc"), info.get("firstTradeDateMilliseconds")))
+    as_of = _resolve_statement_as_of(income_stmt, balance_sheet)
+
+    has_any_signal = any(
+        value is not None
+        for value in (
+            market_cap,
+            float_market_cap,
+            pe_ratio,
+            pb_ratio,
+            roe,
+            gross_margin,
+            net_margin,
+            debt_to_asset,
+            revenue_growth,
+            net_profit_growth,
+        )
+    ) or bool(industry)
+
+    if not has_any_signal:
+        raise SupplementalProviderNotFoundError("Yahoo Finance returned no usable fundamentals")
+
     return FundamentalsResponse(
         symbol=symbol,
-        as_of=datetime.now(timezone.utc),
+        as_of=as_of,
         providers=[YAHOO_FUNDAMENTALS_PROVIDER],
         company_name=company_name,
-        industry=_pick_first_text(info.get("industry"), info.get("sector")),
-        listed_date=None,
-        market_cap=_safe_float(info.get("marketCap")),
+        industry=industry,
+        listed_date=listed_date,
+        market_cap=market_cap,
         float_market_cap=float_market_cap,
-        pe_ratio=_safe_float(_pick_first_value(info.get("trailingPE"), info.get("forwardPE"))),
-        pb_ratio=_safe_float(info.get("priceToBook")),
-        roe=_ratio_to_percent(info.get("returnOnEquity")),
-        gross_margin=_ratio_to_percent(info.get("grossMargins")),
-        net_margin=_ratio_to_percent(info.get("profitMargins")),
-        debt_to_asset=None,
-        revenue_growth=_ratio_to_percent(info.get("revenueGrowth")),
-        net_profit_growth=_ratio_to_percent(info.get("earningsGrowth")),
-        source_note="美股与非 A 股基本面当前主要通过 Yahoo Finance 获取。",
+        pe_ratio=pe_ratio,
+        pb_ratio=pb_ratio,
+        roe=roe,
+        gross_margin=gross_margin,
+        net_margin=net_margin,
+        debt_to_asset=debt_to_asset,
+        revenue_growth=revenue_growth,
+        net_profit_growth=net_profit_growth,
+        source_note="美股与非 A 股基本面当前会优先汇总 Yahoo Finance 的概览字段、fast_info 与财报表数据。",
     )
 
 
@@ -750,3 +877,114 @@ def _ratio_to_percent(value: Any) -> float | None:
     if abs(parsed) <= 1:
         parsed *= 100
     return round(parsed, 4)
+
+
+def _safe_yfinance_fast_info(ticker: yf.Ticker) -> dict[str, Any]:
+    try:
+        raw_fast_info = ticker.fast_info or {}
+    except Exception as exc:  # pragma: no cover - network/runtime dependent
+        logger.warning("Yahoo Finance fast_info fetch failed: %s", exc)
+        return {}
+
+    try:
+        return dict(raw_fast_info)
+    except Exception:
+        return {}
+
+
+def _safe_yfinance_statement_frame(loader: Any, symbol: str, label: str) -> Any | None:
+    try:
+        frame = loader()
+    except Exception as exc:  # pragma: no cover - network/runtime dependent
+        logger.warning("Yahoo Finance %s fetch failed for %s: %s", label, symbol, exc)
+        return None
+
+    if frame is None or getattr(frame, "empty", True):
+        return None
+    return frame
+
+
+def _extract_statement_values(frame: Any, row_labels: list[str]) -> list[float]:
+    if frame is None or getattr(frame, "empty", True):
+        return []
+
+    index = getattr(frame, "index", None)
+    if index is None:
+        return []
+
+    normalized_rows = {str(row).strip().casefold(): row for row in index}
+    for label in row_labels:
+        matched_row = normalized_rows.get(label.casefold())
+        if matched_row is None:
+            continue
+
+        try:
+            series = frame.loc[matched_row]
+        except Exception:
+            continue
+
+        if hasattr(series, "sort_index"):
+            try:
+                series = series.sort_index(ascending=False)
+            except Exception:
+                pass
+
+        values: list[Any]
+        if hasattr(series, "tolist"):
+            values = list(series.tolist())
+        elif isinstance(series, (list, tuple)):
+            values = list(series)
+        else:
+            values = [series]
+
+        parsed_values = [_safe_float(value) for value in values]
+        return [value for value in parsed_values if value is not None]
+
+    return []
+
+
+def _calculate_growth_percent(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+
+    current_value = values[0]
+    previous_value = values[1]
+    if previous_value == 0:
+        return None
+
+    return round(((current_value - previous_value) / abs(previous_value)) * 100, 4)
+
+
+def _resolve_statement_as_of(*frames: Any) -> datetime:
+    for frame in frames:
+        if frame is None or getattr(frame, "empty", True):
+            continue
+
+        columns = list(getattr(frame, "columns", []))
+        if not columns:
+            continue
+
+        try:
+            latest_column = sorted(columns, reverse=True)[0]
+        except Exception:
+            latest_column = columns[0]
+        return _coerce_datetime(latest_column)
+
+    return datetime.now(timezone.utc)
+
+
+def _normalize_epoch_date(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    parsed = _safe_float(value)
+    if parsed is None:
+        return None
+
+    if parsed > 10_000_000_000:
+        parsed /= 1000
+
+    try:
+        return datetime.fromtimestamp(parsed, tz=timezone.utc).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
